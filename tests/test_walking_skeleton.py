@@ -10,7 +10,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from ave.adapters import get_default_pack
+from ave.adapters.python_authz import catalog
 from ave.invariant import invariant_holds
 from ave.phases.verify import verify
 from ave.records.store import build_run_record
@@ -69,23 +72,41 @@ def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
     assert "object-ownership-gap (BOLA)" not in body
     assert "ownership guard" not in body
     assert "```diff" in body
+    assert "Not an applicable diff" in body, (
+        "the body names the vendored file and ships the model's diff; it must say so"
+    )
     patch = artifacts["patch"].read_text()
     assert "current_user" in patch
+    assert "_skeleton_target.py" in patch, "headers must name the file the body came from"
+    assert "get_order_service.py" not in patch, "the body is not the vendored function"
 
 
-def test_find_surfaces_the_real_target_catalog() -> None:
-    # Ticket 04 repointed find() at the vendored target catalog: 8 instances, the
-    # anchor first (so Assess, which takes findings[0], drives it end to end).
-    findings = get_default_pack().find("target/dvrestaurant@d32d0997")
-    assert len(findings) == 8
-    anchor = findings[0]
-    assert anchor["id"] == "I-04"
-    assert anchor["evidence"]["is_loop_anchor"] is True
-    # Every instance is bound to a by-path exploit oracle with inverted polarity.
-    for f in findings:
-        oracle = f["evidence"]["oracle"]
+def test_catalog_ground_truth_holds_every_seeded_instance() -> None:
+    instances = catalog.ground_truth()
+    assert len(instances) == 8
+    assert [i["id"] for i in instances if i["evidence"]["is_loop_anchor"]] == ["I-04"]
+    for i in instances:
+        oracle = i["evidence"]["oracle"]
         assert oracle["path"].endswith(".py")
         assert oracle["polarity"] == "inverted"
+
+
+def test_find_claims_only_the_loop_anchor() -> None:
+    findings = get_default_pack().find("target/dvrestaurant@d32d0997")
+    assert [f["id"] for f in findings] == ["I-04"]
+    assert findings[0]["evidence"]["is_loop_anchor"] is True
+
+
+def test_non_anchor_instances_are_not_claimed() -> None:
+    pack = get_default_pack()
+    other = next(i for i in catalog.ground_truth() if i["id"] == "I-03")
+
+    with pytest.raises(NotImplementedError, match="I-03"):
+        pack.blast_radius(other)
+    with pytest.raises(NotImplementedError, match="I-03"):
+        pack.prepare_fix(other)
+    with pytest.raises(NotImplementedError, match="I-03"):
+        pack.run_exploit(other, fixed=False)
 
 
 def test_exploit_oracle_has_inverted_polarity() -> None:

@@ -24,7 +24,12 @@ from ave.state import Finding
 class PreparedFix(dict[str, Any]):
     """A class-level change plus the artifacts a PR needs. A plain dict subclass so it
     threads through graph state unchanged; keys: `class_level`, `summary`, `patch`
-    (unified diff), `finding_id`, `blast_radius`."""
+    (unified diff), `patch_caveat`, `finding_id`, `blast_radius`.
+
+    `patch_caveat` is the pack's one-sentence warning to the reviewer, rendered above the
+    diff, for when the patch does not apply cleanly to the target as shipped. The pack
+    words it because only the pack knows what its patch stands for; the core stays
+    language-neutral (D3) and just renders whatever it is handed."""
 
 
 @runtime_checkable
