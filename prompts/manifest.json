@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "0",
+  "description": "Prompt manifest — prompts-as-code for the AVE graph. Internal-first for v1 (not a committed export unless a later project needs it). Each phase that reasons registers its prompt here so it is versioned, diffable, and eval-addressable.",
+  "prompts": {}
+}
