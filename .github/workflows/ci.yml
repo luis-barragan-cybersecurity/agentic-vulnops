@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint + typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: make setup
+
+      - name: Lint
+        run: make lint
+
+      - name: Type-check (strict)
+        run: make typecheck
+
+      - name: Tests
+        run: make test
+
+  # The invariant is re-validated from the run record in CI, independently of the
+  # in-graph construction gate — never enforced by a prompt. Wired as a stub here;
+  # ticket 05 (policy.yaml + record schemas) fills in the real check.
+  invariant:
+    name: invariant re-validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: make setup
+      - name: Re-validate invariant from run record
+        run: python -m ave.invariant --check

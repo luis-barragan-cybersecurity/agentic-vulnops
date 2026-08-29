@@ -1,0 +1,17 @@
+# promptfoo suite — evals-as-property, run against the real AVE graph.
+# Scaffold (ticket 02): one smoke case. The suites sharpen once the loop runs
+# (see "Eval-suite wiring" in the plan). k=3 + a cheap tool-result screen come with it.
+description: AVE evals-as-property
+
+providers:
+  - id: file://provider.py
+    label: ave-graph
+
+prompts:
+  - "Run the AVE graph over the seeded target and report the fix outcome."
+
+tests:
+  - description: graph runs end-to-end and claims nothing without a green ladder
+    assert:
+      - type: javascript
+        value: output.ready_to_merge === false

@@ -1,0 +1,27 @@
+# policy.yaml — governance-as-data (compounding export #2).
+#
+# The rules AVE obeys, expressed as data and never as prompt. A decision record MUST cite
+# this `version`. Scaffold only (ticket 02); ticket 05 fixes the full schema
+# (fix predicates, blast-radius limits, T0-T2 + re-attack requirements, per-ring stop
+# criteria, HITL routes).
+
+version: "0"
+
+# What a valid fix must look like (predicates the fix diff is checked against).
+fix_predicates: []
+
+# Caller/PR-level blast-radius limits a change may not exceed.
+blast_radius:
+  max_callers: null
+
+# The verification ladder every ready-to-merge PR must pass.
+verification_ladder:
+  require_t0_build: true
+  require_t1_exploit_oracle_flipped: true
+  require_t2_full_suite: true
+  require_reattack: true
+
+# Where a human must be in the loop.
+hitl_routes:
+  - gate: before_prepare
+    approves: decision_record
