@@ -1,0 +1,90 @@
+"""The walking skeleton: one seeded instance walks all seven phases to a real PR + a green
+verification ladder, and the run's artifacts persist to disk and satisfy the invariant.
+
+This is the Phase-1 end-to-end proof — the loop runs on one case and produces the first
+run records. Later tickets deepen each phase; this test guards that the spine stays whole.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from ave.adapters import get_default_pack
+from ave.invariant import invariant_holds
+from ave.phases.verify import verify
+from ave.records.store import build_run_record
+from ave.runner import persist_run, run_once
+from ave.state import AVEState
+
+_INITIAL: AVEState = {
+    "target_ref": "skeleton://python_authz/bola-order-owner",
+    "policy_version": "0",
+}
+
+
+def test_loop_runs_end_to_end_and_produces_a_ready_pr() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+
+    assert final.get("human_approved") is True
+    assert final.get("decision_record") is not None
+    assert str(final.get("pr_ref")).startswith("local:pr/")
+    # The ladder was run for real against the seeded instance and is fully green.
+    assert final.get("verification") == {
+        "t0_build": True,
+        "t1_exploit_oracle_flipped": True,
+        "t2_full_suite": True,
+        "reattack_clean": True,
+    }
+    assert final.get("ready_to_merge") is True
+
+
+def test_every_phase_recorded_a_span() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    phases = [s["phase"] for s in final.get("spans", [])]
+    assert phases == ["intake", "match", "assess", "decide", "prepare", "execute", "verify"]
+
+
+def test_run_record_persists_and_satisfies_the_invariant(tmp_path: Path) -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    artifacts = persist_run(final, base_dir=tmp_path)
+
+    record_path = artifacts["run_record"]
+    assert record_path.exists()
+    doc = json.loads(record_path.read_text())
+    assert doc["ready_to_merge"] is True
+    assert doc["decision_record_present"] is True
+    assert [s["phase"] for s in doc["spans"]] == [
+        "intake", "match", "assess", "decide", "prepare", "execute", "verify"
+    ]
+    # The persisted record is what CI re-validates the invariant from.
+    assert invariant_holds(build_run_record(final)) is True
+
+
+def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    artifacts = persist_run(final, base_dir=tmp_path)
+
+    body = artifacts["pr_body"].read_text()
+    assert "Ready to merge: yes" in body
+    assert "```diff" in body
+    patch = artifacts["patch"].read_text()
+    assert "current_user" in patch  # the ownership guard shows up in the diff
+
+
+def test_exploit_oracle_has_inverted_polarity() -> None:
+    pack = get_default_pack()
+    (finding,) = pack.find("skeleton://python_authz/bola-order-owner")
+    # Inverted polarity: exploit SUCCEEDS while vulnerable, is BLOCKED once fixed.
+    assert pack.run_exploit(finding, fixed=False) is True
+    assert pack.run_exploit(finding, fixed=True) is False
+    # The fix must not break legitimate owner access.
+    assert pack.legitimate_use_holds(fixed=True) is True
+
+
+def test_nothing_is_claimed_without_a_green_ladder() -> None:
+    # The invariant's structural point: no finding => an all-false ladder => not ready,
+    # even though a (finding-less) decision record is present.
+    out = verify({"decision_record": {"x": 1}, "selected_finding": None})
+    assert out["ready_to_merge"] is False
+    assert not any(out["verification"].values())
