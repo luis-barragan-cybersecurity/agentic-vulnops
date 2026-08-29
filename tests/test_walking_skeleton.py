@@ -18,7 +18,7 @@ from ave.runner import persist_run, run_once
 from ave.state import AVEState
 
 _INITIAL: AVEState = {
-    "target_ref": "skeleton://python_authz/bola-order-owner",
+    "target_ref": "target/dvrestaurant@d32d0997",
     "policy_version": "0",
 }
 
@@ -73,12 +73,27 @@ def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
     assert "current_user" in patch
 
 
+def test_find_surfaces_the_real_target_catalog() -> None:
+    # Ticket 04 repointed find() at the vendored target catalog: 8 instances, the
+    # anchor first (so Assess, which takes findings[0], drives it end to end).
+    findings = get_default_pack().find("target/dvrestaurant@d32d0997")
+    assert len(findings) == 8
+    anchor = findings[0]
+    assert anchor["id"] == "I-04"
+    assert anchor["evidence"]["is_loop_anchor"] is True
+    # Every instance is bound to a by-path exploit oracle with inverted polarity.
+    for f in findings:
+        oracle = f["evidence"]["oracle"]
+        assert oracle["path"].endswith(".py")
+        assert oracle["polarity"] == "inverted"
+
+
 def test_exploit_oracle_has_inverted_polarity() -> None:
     pack = get_default_pack()
-    (finding,) = pack.find("skeleton://python_authz/bola-order-owner")
+    anchor = pack.find("target/dvrestaurant@d32d0997")[0]
     # Inverted polarity: exploit SUCCEEDS while vulnerable, is BLOCKED once fixed.
-    assert pack.run_exploit(finding, fixed=False) is True
-    assert pack.run_exploit(finding, fixed=True) is False
+    assert pack.run_exploit(anchor, fixed=False) is True
+    assert pack.run_exploit(anchor, fixed=True) is False
     # The fix must not break legitimate owner access.
     assert pack.legitimate_use_holds(fixed=True) is True
 
