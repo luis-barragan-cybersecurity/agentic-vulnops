@@ -12,10 +12,15 @@ record (ticket 03), kept here as evidence — "the loop runs" — not as a score
 
 ## What this is *not*
 
-The instance is the `python_authz` pack's single **synthetic** BOLA case, standing in for
-the real vendored target until the seeded-instance catalog lands (ticket 04). T1 says the
-*loop mechanics* work end to end — the exploit oracle really flips when the fix is
+This record is the walking skeleton's first pass: the instance is the `python_authz`
+pack's single **synthetic** BOLA case, standing in for the real vendored target. T1 says
+the *loop mechanics* work end to end — the exploit oracle really flips when the fix is
 applied — **not** that AVE beats the Semgrep baseline. Those numbers come from scoring
 against the real catalog (the README results table stays empty until then).
+
+> Since ticket 04 the seeded-instance catalog has landed (`target/CATALOG.md`, 8
+> authorization instances + decoys in the vendored fork). `make run` now drives the real
+> **anchor** instance (I-04, the `get_order` object-ownership gap). This committed record
+> is kept verbatim as the ticket-03 first pass.
 
 Live runs write to `results/runs/<id>/` (git-ignored); regenerate with `make run`.

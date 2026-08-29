@@ -1,0 +1,164 @@
+{
+  "schema": "ave.target-catalog/v1",
+  "target": {
+    "name": "Damn Vulnerable RESTaurant (vendored fork)",
+    "upstream": "https://github.com/theowni/Damn-Vulnerable-RESTaurant-API-Game",
+    "commit": "d32d09972aec7830f5f1d4a5d274cac7aae7eb82",
+    "vendored_path": "target/dvrestaurant",
+    "app_root": "target/dvrestaurant/app",
+    "license": "GPL-3.0"
+  },
+  "oracle_runner": {
+    "not_auto_collected": "Exploit files do not match pytest's python_files glob; each is invoked by PATH, never by discovery.",
+    "polarity": "inverted: a PASSING exploit test means the target is STILL VULNERABLE; the test FAILS once the intended fix lands.",
+    "pinned_env": "target's own Poetry/Docker (python 3.10, fastapi ^0.103, pydantic v1): `docker compose run web pytest <app-relative path>`",
+    "local_env": "from target/dvrestaurant/app with DB_BACKEND=memory ENV=testing: `python -m pytest <path>` (bcrypt pinned 4.0.1; note some native PUT-body oracles need the pinned httpx/pydantic-v1 env, see verification)"
+  },
+  "anchor": "I-04",
+  "counts": {"instances": 8, "bola": 4, "bfla": 4, "decoys": 5},
+  "instances": [
+    {
+      "id": "I-04",
+      "family": "BOLA",
+      "origin": "latent-native",
+      "endpoint": "GET /orders/{order_id}",
+      "file": "app/apis/orders/services/get_order_service.py",
+      "symbol": "get_order",
+      "scanner_blind": true,
+      "why_scanner_blind": "The [CUSTOMER] role gate is present and passing; the missing predicate is object ownership, which a role/pattern rule cannot express.",
+      "oracle": {"path": "app/tests/vulns/ave_seed_bola_order_read.py", "test": "test_bola_cross_customer_order_read", "polarity": "inverted", "origin": "seeded"},
+      "fix_hint": "Bind the fetch to the caller: deny/404 when db_order.user_id != current_user.id.",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "fixed_status": "404", "method": "local in-memory, 2026-08-29"},
+      "loop_anchor": true,
+      "hermetic_oracle": "ave.adapters.python_authz._skeleton_target — an in-process model of this order-ownership gap; the make-check path, pending the target-env by-path runner (deferred)."
+    },
+    {
+      "id": "I-02",
+      "family": "BOLA",
+      "origin": "native",
+      "endpoint": "PUT /profile",
+      "file": "app/apis/auth/services/update_profile_service.py",
+      "symbol": "update_profile",
+      "scanner_blind": true,
+      "why_scanner_blind": "Auth is present; the target user is resolved from the request body's username, not the caller. A Customer is legitimately allowed to edit *a* profile — just not this one — so a role rule stays green. This is the canonical semantic anchor from the survey.",
+      "oracle": {"path": "app/tests/vulns/level_2_unrestricted_profile_update_IDOR.py", "test": "test_unrestricted_profile_update_idor", "polarity": "inverted", "origin": "native"},
+      "fix_hint": "Bind the update to current_user; ignore any body-supplied username.",
+      "verified": {"vulnerable_green": null, "fixed_red": true, "method": "blessed by upstream game (theowni) as a T1 oracle; not re-run locally — native PUT-body oracle needs the pinned httpx/pydantic-v1 env"}
+    },
+    {
+      "id": "I-01",
+      "family": "BFLA",
+      "origin": "native",
+      "endpoint": "DELETE /menu/{item_id}",
+      "file": "app/apis/menu/services/delete_menu_item_service.py",
+      "symbol": "delete_menu_item",
+      "scanner_blind": false,
+      "why_scanner_blind": "The role dependency is commented out; a decorator/pattern rule can sometimes catch a missing gate, so this is the pattern-visible end of the spectrum (kept for contrast with the ownership cases).",
+      "oracle": {"path": "app/tests/vulns/level_1_unrestricted_menu_item_deletion.py", "test": "test_unrestricted_menu_item_deletion", "polarity": "inverted", "origin": "native"},
+      "fix_hint": "Restore auth=Depends(RolesBasedAuthChecker([EMPLOYEE, CHEF])) on the route.",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "method": "local in-memory (DELETE, no body), 2026-08-29"}
+    },
+    {
+      "id": "I-03",
+      "family": "BFLA",
+      "origin": "native",
+      "endpoint": "PUT /users/update_role",
+      "file": "app/apis/users/services/update_user_role_service.py",
+      "symbol": "update_user_role",
+      "scanner_blind": true,
+      "why_scanner_blind": "No RolesBasedAuthChecker at all; the only guard is an ad-hoc value check blocking the Chef value, so any Customer can grant themselves Employee. The gate that should exist is caller-role, not value.",
+      "oracle": {"path": "app/tests/vulns/level_3_privilege_escalation.py", "test": "test_privilege_escalation", "polarity": "inverted", "origin": "native"},
+      "fix_hint": "Restrict role-granting to Employee/Chef callers via the role checker.",
+      "verified": {"vulnerable_green": null, "fixed_red": true, "method": "blessed by upstream game (theowni) as a T1 oracle; not re-run locally — native PUT-body oracle needs the pinned httpx/pydantic-v1 env"}
+    },
+    {
+      "id": "I-05",
+      "family": "BFLA",
+      "origin": "latent-native",
+      "endpoint": "GET /delivery/orders",
+      "file": "app/apis/orders/services/get_orders_for_delivery_service.py",
+      "symbol": "get_orders",
+      "scanner_blind": true,
+      "why_scanner_blind": "The hidden 'delivery integration' route (include_in_schema=False) carries no auth dependency at all; a schema-driven scan skips it because it is not in the OpenAPI surface.",
+      "oracle": {"path": "app/tests/vulns/ave_seed_bfla_delivery_orders.py", "test": "test_bfla_unauthenticated_delivery_orders", "polarity": "inverted", "origin": "seeded"},
+      "fix_hint": "Attach a mandatory auth/role dependency (EMPLOYEE/CHEF or a service credential).",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "fixed_status": "401", "method": "local in-memory, 2026-08-29"}
+    },
+    {
+      "id": "I-06",
+      "family": "BOLA",
+      "origin": "seeded",
+      "endpoint": "GET /discount-coupons?user_id=",
+      "file": "app/apis/referrals/service.py",
+      "symbol": "get_discount_coupons",
+      "scanner_blind": true,
+      "why_scanner_blind": "Seeded gap: the endpoint honours an attacker-supplied user_id and filters coupons on it instead of the caller. Identity/role is valid; ownership is the missing predicate.",
+      "oracle": {"path": "app/tests/vulns/ave_seed_bola_discount_coupons.py", "test": "test_bola_cross_customer_coupon_read", "polarity": "inverted", "origin": "seeded"},
+      "fix_hint": "Always filter on current_user.id; ignore the user_id parameter.",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "fixed_status": "empty list", "method": "local in-memory, 2026-08-29"}
+    },
+    {
+      "id": "I-07",
+      "family": "BOLA",
+      "origin": "seeded",
+      "endpoint": "GET /referral-code?username=",
+      "file": "app/apis/referrals/service.py",
+      "symbol": "get_referral_code_endpoint",
+      "scanner_blind": true,
+      "why_scanner_blind": "Seeded gap: honours an attacker-supplied username and returns that user's referral code. Again a missing ownership predicate, not a missing role check.",
+      "oracle": {"path": "app/tests/vulns/ave_seed_bola_referral_code.py", "test": "test_bola_cross_customer_referral_code_read", "polarity": "inverted", "origin": "seeded"},
+      "fix_hint": "Resolve the referral code only for current_user; ignore username.",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "fixed_status": "returns caller's own code", "method": "local in-memory, 2026-08-29"}
+    },
+    {
+      "id": "I-08",
+      "family": "BFLA",
+      "origin": "seeded",
+      "endpoint": "PUT /menu/{item_id}",
+      "file": "app/apis/menu/services/update_menu_item_service.py",
+      "symbol": "update_menu_item",
+      "scanner_blind": false,
+      "why_scanner_blind": "Seeded gap mirroring native Level 1: the [EMPLOYEE, CHEF] role dependency is commented out on the menu *update* route, so any authenticated user can edit menu items. Pattern-visible (missing decorator) — kept for BFLA balance.",
+      "oracle": {"path": "app/tests/vulns/ave_seed_bfla_menu_update.py", "test": "test_bfla_customer_can_update_menu_item", "polarity": "inverted", "origin": "seeded"},
+      "fix_hint": "Restore auth=Depends(RolesBasedAuthChecker([EMPLOYEE, CHEF])) on the route.",
+      "verified": {"vulnerable_green": true, "fixed_red": true, "fixed_status": "403", "method": "local in-memory (json= body), 2026-08-29"}
+    }
+  ],
+  "decoys": [
+    {
+      "id": "D-01",
+      "endpoint": "GET /admin/stats/disk",
+      "file": "app/apis/admin/services/get_disk_stats_service.py",
+      "must_flag": false,
+      "why_correct": "Authorization IS enforced, just non-standard: an inline `if current_user.role != CHEF` compare instead of the RolesBasedAuthChecker. Correct authz done a different way — false-positive bait."
+    },
+    {
+      "id": "D-02",
+      "endpoint": "GET /admin/reset-chef-password",
+      "file": "app/apis/admin/services/reset_chef_password_service.py",
+      "must_flag": false,
+      "why_correct": "Gate is a network-origin check (request.client.host == 127.0.0.1), not a role. Deliberately not user-role authz; flagging it as a missing role check would be wrong."
+    },
+    {
+      "id": "D-03",
+      "endpoint": "GET /orders/status/{order_id}",
+      "file": "app/apis/orders/services/get_order_status.py",
+      "must_flag": false,
+      "why_correct": "Ownership IS enforced, by hand: `if db_order.user_id != current_user.id`. Looks unguarded (no checker) but is a correct BOLA guard — the exact inverse of I-04. (Carries an unrelated SQLi, out of authz scope.)"
+    },
+    {
+      "id": "D-04",
+      "endpoint": "GET /orders",
+      "file": "app/apis/orders/services/get_orders_service.py",
+      "must_flag": false,
+      "why_correct": "Correct ownership: query filters `Order.user_id == current_user.id`. The right way to do the thing I-04/I-06 get wrong."
+    },
+    {
+      "id": "D-05",
+      "endpoint": "PATCH /profile",
+      "file": "app/apis/auth/services/patch_profile_service.py",
+      "must_flag": false,
+      "why_correct": "Ownership is correct (binds to current_user.username). It has a mass-assignment issue (Extra.allow lets role be set) — an authz-adjacent bug, but NOT a missing object/function authorization check, so it must not be reported as BOLA/BFLA."
+    }
+  ]
+}

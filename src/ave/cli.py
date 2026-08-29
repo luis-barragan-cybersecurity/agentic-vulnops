@@ -7,11 +7,12 @@ Backs the Makefile verbs and the `ave` console script.
   ave eradicate   -> break -> run -> HITL approve -> PR (demo steps 1-3)
   ave scoreboard  -> regenerate the results table from run records (demo step 4)
 
-The walking skeleton (ticket 03) makes `run` real end to end against the `python_authz`
-pack's single synthetic instance: it walks all seven phases and writes a run record +
-PR bundle under `results/runs/<id>/`. The HITL gate is in the graph; the CLI
-auto-approves and does not pause. `break` and `scoreboard` stay thin until the real
-target (ticket 04) and the metrics/schema work (ticket 05).
+The walking skeleton (ticket 03) makes `run` real end to end: it walks all seven phases
+and writes a run record + PR bundle under `results/runs/<id>/`. Ticket 04 repointed the
+pack's finding source at the **real vendored target catalog** (`target/catalog.json`, 8
+authorization instances); `run` drives the anchor instance (I-04) with a hermetic oracle.
+The HITL gate is in the graph; the CLI auto-approves and does not pause. `break` and
+`scoreboard` stay thin until the metrics/schema work (ticket 05).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ def _run(_: argparse.Namespace) -> int:
     tracer = setup_tracing()
     with tracer.start_as_current_span("ave.run"):
         initial: AVEState = {
-            "target_ref": "skeleton://python_authz/bola-order-owner",
+            "target_ref": "target/dvrestaurant@d32d0997",
             "policy_version": policy_version(),
         }
         print("run: walking seven phases; HITL gate auto-approves (no pause).")
@@ -44,8 +45,8 @@ def _run(_: argparse.Namespace) -> int:
 
 
 def _break(_: argparse.Namespace) -> int:
-    print("break: would seed a semantic ownership flaw into the real target (ticket 04).")
-    print("       the skeleton run uses the python_authz pack's built-in BOLA instance.")
+    print("break: the vendored target already carries the seeded catalog (target/CATALOG.md,")
+    print("       8 authorization instances + decoys). `run` drives the BOLA anchor (I-04).")
     return 0
 
 
