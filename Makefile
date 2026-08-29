@@ -29,13 +29,13 @@ check: lint typecheck test ## Lint + typecheck + tests (the CI gate)
 eval: ## Run promptfoo eval suites against the real graph
 	cd evals && npx --yes promptfoo eval -c promptfooconfig.yaml
 
-run: ## Run the seven-phase graph on a seeded instance (stub loop)
+run: ## Walk the seven-phase graph on one seeded instance, write artifacts
 	$(PYTHON) -m ave.cli run
 
 break: ## Seed a semantic ownership flaw into the target (demo step 1)
 	$(PYTHON) -m ave.cli break
 
-eradicate: ## Money-shot: break -> run -> HITL approve -> PR (demo steps 1-3)
+eradicate: ## Demo: break -> auto-approved run -> PR bundle (HITL does not pause)
 	$(PYTHON) -m ave.cli eradicate
 
 scoreboard: ## Regenerate the results table from run records (demo step 4)

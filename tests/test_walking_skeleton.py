@@ -1,5 +1,5 @@
-"""The walking skeleton: one seeded instance walks all seven phases to a real PR + a green
-verification ladder, and the run's artifacts persist to disk and satisfy the invariant.
+"""The walking skeleton: one seeded instance walks all seven phases to a real PR, T1
+flips, stub rungs stay false, and the run's artifacts persist to disk.
 
 This is the Phase-1 end-to-end proof — the loop runs on one case and produces the first
 run records. Later tickets deepen each phase; this test guards that the spine stays whole.
@@ -23,20 +23,19 @@ _INITIAL: AVEState = {
 }
 
 
-def test_loop_runs_end_to_end_and_produces_a_ready_pr() -> None:
+def test_loop_runs_end_to_end_and_produces_a_pr() -> None:
     final = run_once(_INITIAL, auto_approve=True)
 
     assert final.get("human_approved") is True
     assert final.get("decision_record") is not None
     assert str(final.get("pr_ref")).startswith("local:pr/")
-    # The ladder was run for real against the seeded instance and is fully green.
     assert final.get("verification") == {
-        "t0_build": True,
+        "t0_build": False,
         "t1_exploit_oracle_flipped": True,
-        "t2_full_suite": True,
-        "reattack_clean": True,
+        "t2_full_suite": False,
+        "reattack_clean": False,
     }
-    assert final.get("ready_to_merge") is True
+    assert final.get("ready_to_merge") is False
 
 
 def test_every_phase_recorded_a_span() -> None:
@@ -52,7 +51,7 @@ def test_run_record_persists_and_satisfies_the_invariant(tmp_path: Path) -> None
     record_path = artifacts["run_record"]
     assert record_path.exists()
     doc = json.loads(record_path.read_text())
-    assert doc["ready_to_merge"] is True
+    assert doc["ready_to_merge"] is False
     assert doc["decision_record_present"] is True
     assert [s["phase"] for s in doc["spans"]] == [
         "intake", "match", "assess", "decide", "prepare", "execute", "verify"
@@ -66,10 +65,12 @@ def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
     artifacts = persist_run(final, base_dir=tmp_path)
 
     body = artifacts["pr_body"].read_text()
-    assert "Ready to merge: yes" in body
+    assert "Ready to merge: no" in body
+    assert "object-ownership-gap (BOLA)" not in body
+    assert "ownership guard" not in body
     assert "```diff" in body
     patch = artifacts["patch"].read_text()
-    assert "current_user" in patch  # the ownership guard shows up in the diff
+    assert "current_user" in patch
 
 
 def test_exploit_oracle_has_inverted_polarity() -> None:
