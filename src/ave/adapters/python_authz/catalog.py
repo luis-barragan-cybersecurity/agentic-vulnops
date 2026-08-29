@@ -1,10 +1,13 @@
 """Load the vendored target's seeded-instance catalog and project it into neutral
 `Finding` records for the core.
 
-Ticket 04 repointed the pack's finding source from the single synthetic instance at the
-real vendored target: `target/catalog.json` is the source of truth (8 authorization
-instances + decoys, each bound to a by-path exploit oracle with inverted polarity). The
-core only ever sees neutral `Finding`s — the `authz`/`fastapi`/BOLA specifics stay in
+`target/catalog.json` holds 8 authorization instances plus decoys, each bound to a by-path
+exploit oracle with inverted polarity. It plays two roles, and this module keeps them
+apart. `ground_truth()` is the scored answer key that ticket 07 measures precision and
+recall against, so no detector may return it. `anchor()` is the single instance the loop
+drives, which is all the pack claims to have found today.
+
+The core only ever sees neutral `Finding`s. The `authz`/`fastapi`/BOLA specifics stay in
 `evidence`, behind the seam (D3).
 """
 
@@ -53,10 +56,13 @@ def _to_finding(inst: dict[str, Any]) -> Finding:
     return finding
 
 
-def findings() -> list[Finding]:
-    """Every catalogued vuln instance as a neutral Finding, anchor first (so Assess,
-    which selects findings[0], drives the instance with the hermetic oracle)."""
-    anchor = anchor_id()
-    instances = _raw()["instances"]
-    ordered = sorted(instances, key=lambda i: (i["id"] != anchor, i["id"]))
-    return [_to_finding(i) for i in ordered]
+def ground_truth() -> list[Finding]:
+    """Every catalogued vuln instance as a neutral Finding, ordered by id. This is the
+    answer key ticket 07 scores against, not something a finding source may return."""
+    return [_to_finding(i) for i in sorted(_raw()["instances"], key=lambda i: i["id"])]
+
+
+def anchor() -> Finding:
+    """The one instance the loop drives, the only one with a hermetic in-process oracle."""
+    by_id = {i["id"]: i for i in _raw()["instances"]}
+    return _to_finding(by_id[anchor_id()])

@@ -1,12 +1,13 @@
 """Hermetic in-process oracle for the loop **anchor** (catalog instance I-04 — the
 `get_order` object-ownership BOLA gap).
 
-Ticket 04 repointed the pack's *finding source* at the real vendored target
-(`target/catalog.json`, 8 instances + decoys). This module is retained as the anchor's
-**in-process oracle model**: two implementations of the same endpoint — vulnerable and
-fixed — plus the exploit oracle (inverted polarity) and a legitimate-use check. The loop
-drives I-04 through this model so `make check` runs without standing up the target's
-Python-3.10 / FastAPI-0.103 environment. The anchor's canonical by-path oracle is
+Ticket 04 pointed the pack at the real vendored target, whose catalog
+(`target/catalog.json`, 8 instances + decoys) the pack declares exactly one finding from:
+this anchor. The module is retained as that anchor's **in-process oracle model**: two
+implementations of the same endpoint — vulnerable and fixed — plus the exploit oracle
+(inverted polarity) and a legitimate-use check. The loop drives I-04 through this model so
+`make check` runs without standing up the target's Python-3.10 / FastAPI-0.103
+environment. The anchor's canonical by-path oracle is
 `target/dvrestaurant/app/tests/vulns/ave_seed_bola_order_read.py` (verified to flip);
 wiring the loop to run the by-path oracles of the other instances is the next deepening.
 
