@@ -33,7 +33,7 @@ def render_pr_body(state: AVEState) -> str:
     lines.append("")
     lines.append(
         f"**Finding** `{finding.get('id')}` — {finding.get('kind')} "
-        f"({finding.get('evidence', {}).get('family', '?')}) at `{finding.get('location')}`"
+        f"at `{finding.get('location')}`"
     )
     lines.append(
         f"**Target** `{state.get('target_ref')}` · pack `{state.get('target_ref_pack')}` · "

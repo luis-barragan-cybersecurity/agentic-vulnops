@@ -1,10 +1,10 @@
 # AVE fix: Enforce object ownership in get_order (BOLA class-level fix)
 
-**Finding** `bola-order-owner` — object-ownership-gap (BOLA) at `ave.adapters.python_authz._skeleton_target:get_order_vulnerable`
+**Finding** `bola-order-owner` — object-ownership-gap at `ave.adapters.python_authz._skeleton_target:get_order_vulnerable`
 **Target** `skeleton://python_authz/bola-order-owner` · pack `python_authz` · policy `0`
 
 ## Why (decision record)
-Class-level ownership guard removes the object-ownership-gap at ave.adapters.python_authz._skeleton_target:get_order_vulnerable (fixes the whole class, not one call site).
+Class-level fix removes the object-ownership-gap at ave.adapters.python_authz._skeleton_target:get_order_vulnerable (fixes the whole class, not one call site).
 _Authorized by:_ helper-only diff within blast-radius limits; verification ladder required
 
 ## Blast radius
@@ -29,9 +29,9 @@ _Authorized by:_ helper-only diff within blast-radius limits; verification ladde
 ```
 
 ## Verification ladder
-- [x] T0 build
+- [ ] T0 build
 - [x] T1 exploit oracle flipped
-- [x] T2 full suite
-- [x] re-attack clean
+- [ ] T2 full suite
+- [ ] re-attack clean
 
-**Ready to merge: yes**
+**Ready to merge: no**

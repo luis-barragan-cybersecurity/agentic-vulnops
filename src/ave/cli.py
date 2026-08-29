@@ -8,9 +8,10 @@ Backs the Makefile verbs and the `ave` console script.
   ave scoreboard  -> regenerate the results table from run records (demo step 4)
 
 The walking skeleton (ticket 03) makes `run` real end to end against the `python_authz`
-pack's single synthetic instance: it walks all seven phases through the HITL gate and
-writes a run record + PR bundle under `results/runs/<id>/`. `break` and `scoreboard`
-stay thin until the real target (ticket 04) and the metrics/schema work (ticket 05).
+pack's single synthetic instance: it walks all seven phases and writes a run record +
+PR bundle under `results/runs/<id>/`. The HITL gate is in the graph; the CLI
+auto-approves and does not pause. `break` and `scoreboard` stay thin until the real
+target (ticket 04) and the metrics/schema work (ticket 05).
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ def _run(_: argparse.Namespace) -> int:
             "target_ref": "skeleton://python_authz/bola-order-owner",
             "policy_version": policy_version(),
         }
-        print("run: walking Intake..Decide, pausing at the HITL interrupt() gate...")
+        print("run: walking seven phases; HITL gate auto-approves (no pause).")
         final = run_once(initial, auto_approve=True)
         artifacts = persist_run(final)
     print("run complete.")
@@ -50,7 +51,7 @@ def _break(_: argparse.Namespace) -> int:
 
 def _eradicate(args: argparse.Namespace) -> int:
     _break(args)
-    print("eradicate: the money-shot demo pauses at the HITL interrupt() gate.")
+    print("eradicate: break then run. HITL gate auto-approves (no pause).")
     return _run(args)
 
 

@@ -6,9 +6,9 @@ structurally: `ready_to_merge` can be True only with a fully green ladder AND a 
 record. The exploit oracle has **inverted polarity**: it passes (True) while the target is
 vulnerable and must fail (False) once the fix holds — so T1 is "flipped", not "passed".
 
-Skeleton: the ladder is run for real against the `python_authz` pack's one instance. No
-selected finding or prepared change => an all-false ladder, so nothing is ever falsely
-claimed.
+Skeleton: only T1 is a real check (the oracle flips on the pack's one instance). T0,
+T2, and re-attack stay false until those rungs exist, so `ready_to_merge` stays false.
+No selected finding or prepared change => an all-false ladder.
 """
 
 from __future__ import annotations
@@ -32,15 +32,11 @@ def verify(state: AVEState) -> AVEState:
 
     if selected is not None and change is not None:
         pack = get_default_pack()
-        exploit_before = pack.run_exploit(selected, fixed=False)  # True == vulnerable
-        exploit_after = pack.run_exploit(selected, fixed=True)  # False == fix holds
-        ladder = {
-            "t0_build": bool(change.get("patch")),
-            # Flipped: the oracle succeeded before the fix and is blocked after it.
-            "t1_exploit_oracle_flipped": exploit_before and not exploit_after,
-            "t2_full_suite": pack.legitimate_use_holds(fixed=True),
-            "reattack_clean": not pack.run_exploit(selected, fixed=True),
-        }
+        exploit_before = pack.run_exploit(selected, fixed=False)
+        exploit_after = pack.run_exploit(selected, fixed=True)
+        # T1 only. A nonempty patch is not a build; a legitimate-owner call is not
+        # a full suite; a second exploit call is not a re-attack.
+        ladder["t1_exploit_oracle_flipped"] = exploit_before and not exploit_after
 
     green = all(ladder.values())
     has_record = state.get("decision_record") is not None

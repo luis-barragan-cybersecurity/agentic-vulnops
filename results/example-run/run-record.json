@@ -57,11 +57,11 @@
       "started_at": "2026-08-29T18:58:00.221298+00:00",
       "ended_at": "2026-08-29T18:58:00.221314+00:00",
       "attributes": {
-        "ladder_green": true,
-        "ready": true
+        "ladder_green": false,
+        "ready": false
       }
     }
   ],
-  "ready_to_merge": true,
+  "ready_to_merge": false,
   "decision_record_present": true
 }

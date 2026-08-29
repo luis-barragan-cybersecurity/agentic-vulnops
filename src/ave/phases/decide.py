@@ -22,7 +22,7 @@ def decide(state: AVEState) -> AVEState:
     )
     if selected is not None:
         record["rationale"] = (
-            f"Class-level ownership guard removes the {selected.get('kind')} at "
+            f"Class-level fix removes the {selected.get('kind')} at "
             f"{selected.get('location')} (fixes the whole class, not one call site)."
         )
         record["authorization"]["predicate"] = (

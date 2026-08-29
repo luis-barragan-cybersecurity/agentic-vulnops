@@ -92,8 +92,8 @@ theowni, used under GPL-3.0. See [`ATTRIBUTION.md`](./ATTRIBUTION.md).
 ```bash
 make setup       # install AVE + dev tooling
 make check       # lint + strict typecheck + tests
-make run         # run the seven-phase graph on a seeded instance (stub loop)
-make eradicate   # the money-shot: break → run → HITL approve → PR (demo)
+make run         # walk seven phases on one seeded instance, write artifacts
+make eradicate   # break then auto-approved run (HITL does not pause)
 make scoreboard  # regenerate the results table from run records
 ```
 
