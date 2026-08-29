@@ -1,21 +1,21 @@
 """Phase 2 — Match.
 
-Surface candidate findings from the target. In v1 this fans in rule findings and LLM
-findings behind the adapter seam; the core only sees neutral `Finding` records. Stub:
-emits a single placeholder finding so the loop has something to carry.
+Surface candidate findings from the target via the language pack. The pack fans in rule
+and model findings behind the adapter seam; the core only ever sees neutral `Finding`
+records. Skeleton: the `python_authz` pack returns one BOLA object-ownership gap.
 """
 
 from __future__ import annotations
 
-from ave.state import AVEState, Finding
+from ave.adapters import get_default_pack
+from ave.records.store import make_span, now_iso
+from ave.state import AVEState
 
 
 def match(state: AVEState) -> AVEState:
-    placeholder: Finding = {
-        "id": "finding-0",
-        "kind": "stub",
-        "location": "unset",
-        "confidence": 0.0,
-        "evidence": {},
+    started = now_iso()
+    findings = get_default_pack().find(state.get("target_ref", "unset"))
+    return {
+        "findings": findings,
+        "spans": [make_span("match", started, {"found": len(findings)})],
     }
-    return {"findings": [placeholder]}

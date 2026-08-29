@@ -8,6 +8,7 @@ adapter seam.
 
 from __future__ import annotations
 
+import operator
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph.message import add_messages
@@ -58,6 +59,8 @@ class AVEState(TypedDict, total=False):
     verification: VerificationLadder
     ready_to_merge: bool
 
-    # Cross-cutting: the OTel-shaped run record every phase appends to.
+    # Cross-cutting: the OTel-shaped run record every phase appends a span to.
     run_record_id: str
+    target_ref_pack: str  # which language pack drove this run (adapter seam)
+    spans: Annotated[list[dict[str, Any]], operator.add]
     messages: Annotated[list[Any], add_messages]
