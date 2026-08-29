@@ -47,13 +47,15 @@ credentials.json
 # Logs
 *.log
 
+# Live run records accumulate here; the committed first-run example is results/example-run.
+results/runs/
+
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 .cursor/
-tests/
 *.swp
 *.swo
 

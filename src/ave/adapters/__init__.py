@@ -1,15 +1,32 @@
-"""The language-pack seam — named here, deliberately **not designed** (D3).
+"""The language-pack seam — the stable interface a per-language adapter plugs into.
 
-A future "language pack" plugs a new language into AVE's stable core by supplying:
+A "language pack" plugs a language into AVE's stable core by supplying:
 
   - finding sources (rule + model findings for that language/stack),
-  - an exploit-oracle harness (how an exploit test is written and its polarity read),
   - blast-radius extraction (caller graph / route map for that stack),
-  - fix templates (what a class-level fix looks like there).
+  - fix templates (what a class-level fix looks like there),
+  - an exploit-oracle harness (how an exploit test is written and its polarity read).
 
-v1 ships exactly one adapter — the Python/FastAPI BOLA/BFLA vertical — and its only
-obligation to the vision is **negative**: the core must not bake in `python`, `fastapi`,
-or `authz`. The real interface cannot be seen until the FastAPI walking skeleton (ticket
-03) shows what is genuinely Python-specific, so no `Protocol` is defined yet — only this
-seam is reserved.
+The interface is `base.LanguagePack`. v1 ships exactly one concrete pack — `python_authz`
+(Python/FastAPI, BOLA/BFLA) — landed by the walking skeleton (ticket 03), which is what
+revealed the genuinely Python-specific edges. Its obligation to the vision (D3) is
+**negative**: the core must never bake in `python`, `fastapi`, or `authz`, so a second
+pack (roadmap) can be added without reshaping the core.
 """
+
+from __future__ import annotations
+
+from ave.adapters.base import LanguagePack, PreparedFix
+
+
+def get_default_pack() -> LanguagePack:
+    """The language pack the graph runs by default. v1: the single Python/authz pack.
+
+    Selection is deliberately trivial here — a registry keyed by language/stack is a
+    second-pack concern (roadmap), not a walking-skeleton one."""
+    from ave.adapters.python_authz import PythonAuthzPack
+
+    return PythonAuthzPack()
+
+
+__all__ = ["LanguagePack", "PreparedFix", "get_default_pack"]

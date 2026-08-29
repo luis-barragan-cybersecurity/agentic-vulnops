@@ -1,0 +1,12 @@
+--- a/_skeleton_target.py:get_order
++++ b/_skeleton_target.py:get_order
+@@ -1,4 +1,6 @@
+ def get_order(order_id: int, current_user: str) -> dict[str, Any]:
+-    """BOLA: returns the requested object with no ownership check — any authenticated
+-    user can read any order."""
+-    return _ORDERS[order_id]
++    """The class-level fix: enforce object ownership before returning the object."""
++    order = _ORDERS[order_id]
++    if order["owner"] != current_user:
++        raise PermissionError("not the owner of this order")
++    return order
