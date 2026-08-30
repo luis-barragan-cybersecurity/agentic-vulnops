@@ -82,6 +82,35 @@ def _helper_only(fix_plan: FixPlan, helper_only_diff: dict[str, Any]) -> bool:
     )
 
 
+def _limit_breached(blast: BlastRadius, limits: dict[str, Any]) -> bool:
+    """Does any *measured* dimension exceed its hard limit? Unmeasured (`None`) dimensions
+    are skipped here — they are the `unknown_blast_radius` gate's business, not this one —
+    so this stays total even when `require_all_dimensions_measured` is false."""
+    checks = (
+        (blast.files, "max_files"),
+        (blast.dependents, "max_dependents"),
+        (blast.routes, "max_routes"),
+    )
+    return any(
+        value is not None and key in limits and value > limits[key]
+        for value, key in checks
+    )
+
+
+# The rule a record cites: the grant on a standing decision, else the check that escalated.
+_RULE_FOR_ROUTE = {
+    "out_of_policy_change": "fix_predicates.require_all (a fix predicate failed)",
+    "blast_radius_exceeded": "blast_radius.max_files/max_dependents/max_routes",
+    "unknown_blast_radius": "blast_radius.require_all_dimensions_measured",
+}
+
+
+def _rule_matched(route_kind: str, hitl_route: str | None) -> str:
+    if route_kind == "standing_preauthorized":
+        return "helper_only_diff + class_level + within_blast_radius"
+    return _RULE_FOR_ROUTE.get(hitl_route or "", "out_of_policy")
+
+
 def decide(
     finding: Finding,
     fix_plan: FixPlan,
@@ -109,19 +138,16 @@ def decide(
     ):
         return Escalation(
             "unknown_blast_radius",
-            record("hitl_approved", "unknown_blast_radius", "human"),
+            record("hitl_approved", "unknown_blast_radius", "agent"),
         )
 
-    # blast_radius_exceeded — a hard limit is breached. (Dimensions are measured here.)
-    assert blast.files is not None and blast.dependents is not None and blast.routes is not None
-    if (
-        blast.files > limits.get("max_files", blast.files)
-        or blast.dependents > limits.get("max_dependents", blast.dependents)
-        or blast.routes > limits.get("max_routes", blast.routes)
-    ):
+    # blast_radius_exceeded — a hard limit is breached. Compare only measured dimensions,
+    # so a false `require_all_dimensions_measured` can't crash on a None (it escalates
+    # elsewhere or ships); the assert above no longer guards this branch.
+    if _limit_breached(blast, limits):
         return Escalation(
             "blast_radius_exceeded",
-            record("hitl_approved", "blast_radius_exceeded", "human"),
+            record("hitl_approved", "blast_radius_exceeded", "agent"),
         )
 
     # out_of_policy_change — a fix predicate fails.
@@ -129,7 +155,7 @@ def decide(
     if not (helper_only and fix_plan.is_class_level and fix_plan.preserves_legitimate_access):
         return Escalation(
             "out_of_policy_change",
-            record("hitl_approved", "out_of_policy_change", "human"),
+            record("hitl_approved", "out_of_policy_change", "agent"),
         )
 
     # Standing preauthorization holds.
@@ -181,14 +207,17 @@ def _build_record(
     return DecisionRecord(
         finding_id=finding.get("id", "unknown"),
         policy_version=str(policy.get("version", "unset")),
-        rule_matched="helper_only_diff + class_level + within_blast_radius",
+        rule_matched=_rule_matched(route_kind, hitl_route),
         response=ResponseDecision(
             classification=kind,
             disposition="fix",
             severity="high",
+            # D3-neutral: describe the *shape* of the class-level fix, not the family's
+            # remedy. The language-specific sentence ("guard non-owners", etc.) belongs to
+            # the pack / PR body, never to this compounding core export.
             remediation=(
-                f"Route all access at {location} through a shared authorization guard; "
-                f"deny non-owners / non-roles there."
+                f"Close the whole {kind} class at {location} in one class-level change, "
+                f"not the single instance, without regressing legitimate access."
             ),
             scope=f"the whole {kind} class, not just {location}",
         ),

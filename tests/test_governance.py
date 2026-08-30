@@ -79,7 +79,11 @@ def test_out_of_policy_change_fires_when_a_predicate_fails() -> None:
     assert isinstance(decision, Escalation)
     assert decision.route == "out_of_policy_change"
     assert decision.record_draft.execution.route == "hitl_approved"
-    assert decision.record_draft.decided_by == "human"
+    # The draft is the agent's proposal routed to the gate; no human has ruled yet.
+    assert decision.record_draft.decided_by == "agent"
+    # rule_matched names the check that fired, not the standing-preauth grant.
+    assert "fix_predicates" in decision.record_draft.rule_matched
+    assert "helper_only_diff" not in decision.record_draft.rule_matched
 
 
 def test_blast_radius_exceeded_fires_when_a_hard_limit_is_breached() -> None:

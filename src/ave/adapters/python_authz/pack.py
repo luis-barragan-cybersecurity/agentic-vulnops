@@ -72,9 +72,14 @@ class PythonAuthzPack:
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
         """The proposed class-level remediation surface for the anchor: route object reads
         through a shared ownership guard rather than inlining an `if user.id == ...` check
-        at the one endpoint. Helper-only by construction, so the policy's fix predicates
-        pass and the change is standing-preauthorized. `prepare_fix` realizes it as a patch
-        (an in-process model for v1, per its caveat)."""
+        at the one endpoint. These are the files a *real* fix would touch; they fall inside
+        the policy's helper-only allowlist, so `decide()` grants standing preauthorization
+        on the plan. `decide()` judges this proposal at Decide-time (before Prepare);
+        re-checking the *realized* patch against the same predicate is the before_execute
+        ring gate's job (deferred, ticket 09). In the walking skeleton `prepare_fix` models
+        the diff in-process, so its headers name `_skeleton_target.py`, not these files
+        (caveated on the PreparedFix); on a real target the realized patch touches exactly
+        these paths and that re-check agrees."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         return {
