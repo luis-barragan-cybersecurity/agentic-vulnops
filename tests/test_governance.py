@@ -168,7 +168,7 @@ def test_six_metrics_compute_from_run_records() -> None:
 
     # 1. exposure hours: two verified (1.6h, 2.0h)
     assert metrics["observed_exposure_hours"]["median"] == 1.8
-    assert metrics["observed_exposure_hours"]["p90"] is not None
+    assert metrics["observed_exposure_hours"]["p90"] == 2.0
     # 2. absorption: 2 verified of 3 found (failed_verification still counts as found)
     assert metrics["absorption_ratio"] == round(2 / 3, 3)
     # 3. triage latency median across the three triaged findings (0.4, 0.5, 0.3)

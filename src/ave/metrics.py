@@ -13,6 +13,7 @@ Field names stay language- and vuln-family-neutral (D3).
 from __future__ import annotations
 
 from datetime import datetime
+from math import ceil
 from statistics import median
 from typing import Any
 
@@ -25,7 +26,7 @@ def _hours_between(start: str, end: str) -> float:
 
 def _p90(values: list[float]) -> float:
     ordered = sorted(values)
-    return ordered[int(0.9 * (len(ordered) - 1))]
+    return ordered[ceil(0.9 * len(ordered)) - 1]
 
 
 def compute_metrics(records: list[RunRecord], *, as_of: str) -> dict[str, Any]:
