@@ -46,7 +46,14 @@ class LanguagePack(Protocol):
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
         """The caller/PR-level reach of a change to this finding's symbol. Carries the
         policy-facing dimensions `files` / `dependents` / `routes` the governance
-        predicate is measured against, alongside the reviewer-facing caller view."""
+        predicate is measured against, alongside the reviewer-facing caller view.
+
+        Per ticket 06's PR-body contract, this same pass emits the body's four
+        blast-radius blocks via optional keys — `fact` ({statement, how_sure: 1-5 |
+        "unproven", proof}), `cleared` ([{ruled_out, how}]), `before_you_merge`
+        ([{command, expect}]) — filled only with what the pack can honestly stand
+        behind; the renderer draws honest empties for anything absent and never
+        fabricates a block."""
         ...
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
