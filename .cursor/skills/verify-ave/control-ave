@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Drive AVE the way a user does: Makefile verbs and `python -m ave.cli`.
+# Invocation is in SKILL.md. Do not call this script's internals from a proof.
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
+VENV_PY="$REPO_ROOT/.venv/bin/python"
+VENV_BIN="$REPO_ROOT/.venv/bin"
+
+die() {
+  echo "control-ave: $*" >&2
+  exit 1
+}
+
+require_venv() {
+  [[ -x "$VENV_PY" ]] || die "no $VENV_PY. From the repo root: python3 -m venv .venv && . .venv/bin/activate && make setup"
+}
+
+with_venv() {
+  require_venv
+  PATH="$VENV_BIN:$PATH"
+  export PATH
+  cd "$REPO_ROOT"
+}
+
+cmd_doctor() {
+  require_venv
+  local pyver
+  pyver="$("$VENV_PY" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"
+  "$VENV_PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' \
+    || die "python $pyver is older than 3.11"
+  echo "ok python=$VENV_PY version=$pyver"
+
+  local policy_version gate
+  policy_version="$("$VENV_PY" -c 'from ave.policy.loader import policy_version; print(policy_version())')"
+  gate="$("$VENV_PY" -c 'from ave.graph import HITL_GATE_BEFORE; print(HITL_GATE_BEFORE)')"
+  [[ -n "$policy_version" ]] || die "policy_version() was empty"
+  [[ "$gate" == "prepare" ]] || die "HITL_GATE_BEFORE is '$gate', expected prepare"
+  echo "ok policy_version=$policy_version"
+  echo "ok hitl_gate_before=$gate"
+  echo "ok policy_path=$REPO_ROOT/policy.yaml"
+
+  local inv
+  inv="$("$VENV_PY" -m ave.invariant --check)"
+  [[ "$inv" == "invariant: OK (no run records to validate yet)" ]] || die "unexpected invariant stdout: $inv"
+  echo "ok invariant"
+
+  local help
+  help="$("$VENV_PY" -m ave.cli --help 2>/dev/null || true)"
+  [[ "$help" == *"  run"* ]] || die "ave --help missing run"
+  [[ "$help" == *"  break"* ]] || die "ave --help missing break"
+  [[ "$help" == *"  eradicate"* ]] || die "ave --help missing eradicate"
+  [[ "$help" == *"  scoreboard"* ]] || die "ave --help missing scoreboard"
+  echo "ok commands=run,break,eradicate,scoreboard"
+  echo "ok repo=$REPO_ROOT"
+}
+
+cmd_cli() {
+  with_venv
+  exec "$VENV_PY" -m ave.cli "$@"
+}
+
+cmd_make() {
+  with_venv
+  exec make PYTHON="$VENV_PY" "$@"
+}
+
+cmd_pytest() {
+  with_venv
+  exec "$VENV_BIN/pytest" "$@"
+}
+
+cmd_invariant() {
+  with_venv
+  exec "$VENV_PY" -m ave.invariant "$@"
+}
+
+cmd_capture() {
+  local name="${1:-}"
+  [[ -n "$name" ]] || die "capture needs a feature directory name"
+  shift
+  if [[ "${1:-}" == "--" ]]; then
+    shift
+  fi
+  [[ -n "${1:-}" ]] || die "capture needs a command after the name"
+  case "$1" in
+    cli|make|pytest|invariant|doctor)
+      set -- "$SKILL_DIR/control-ave" "$@"
+      ;;
+  esac
+  local dir="$SKILL_DIR/artifacts/$name"
+  mkdir -p "$dir"
+  printf '%s\n' "$*" > "$dir/command.txt"
+  set +e
+  PATH="$VENV_BIN:$PATH" "$@" >"$dir/stdout.txt" 2>"$dir/stderr.txt"
+  local ec=$?
+  set -e
+  printf '%s\n' "$ec" > "$dir/exit_code.txt"
+  echo "wrote $dir (exit $ec)"
+  return "$ec"
+}
+
+usage() {
+  cat <<'EOF'
+control-ave doctor
+control-ave cli -- <ave subcommand>
+control-ave make -- <makefile target>
+control-ave pytest -- <pytest args>
+control-ave invariant -- [--check]
+control-ave capture <feature-dir> -- <command...>
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  [[ -n "$cmd" ]] || { usage; exit 2; }
+  shift || true
+  case "$cmd" in
+    doctor) cmd_doctor "$@" ;;
+    cli)
+      [[ "${1:-}" == "--" ]] && shift
+      cmd_cli "$@"
+      ;;
+    make)
+      [[ "${1:-}" == "--" ]] && shift
+      cmd_make "$@"
+      ;;
+    pytest)
+      [[ "${1:-}" == "--" ]] && shift
+      cmd_pytest "$@"
+      ;;
+    invariant)
+      [[ "${1:-}" == "--" ]] && shift
+      cmd_invariant "$@"
+      ;;
+    capture)
+      cmd_capture "$@"
+      ;;
+    -h|--help|help) usage ;;
+    *) die "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"
