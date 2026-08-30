@@ -1,7 +1,7 @@
 [
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/auth/services/patch_profile_service.py",
+    "path": "app/apis/auth/services/patch_profile_service.py",
     "start": {
       "line": 33,
       "col": 1,
@@ -30,7 +30,7 @@
   },
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+    "path": "app/apis/auth/services/update_profile_service.py",
     "start": {
       "line": 21,
       "col": 1,
@@ -59,7 +59,7 @@
   },
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
+    "path": "app/apis/menu/services/delete_menu_item_service.py",
     "start": {
       "line": 12,
       "col": 1,
@@ -88,7 +88,7 @@
   },
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+    "path": "app/apis/menu/services/update_menu_item_service.py",
     "start": {
       "line": 19,
       "col": 1,
@@ -117,7 +117,7 @@
   },
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/referrals/service.py",
+    "path": "app/apis/referrals/service.py",
     "start": {
       "line": 63,
       "col": 1,
@@ -146,7 +146,7 @@
   },
   {
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
-    "path": "/home/hackeye/Desktop/code/personal/agentic-vulnops/target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+    "path": "app/apis/users/services/update_user_role_service.py",
     "start": {
       "line": 12,
       "col": 1,

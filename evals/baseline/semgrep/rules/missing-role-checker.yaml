@@ -8,11 +8,12 @@
 #
 # What it *structurally cannot* do is object-level authorization (BOLA): whether a
 # handler binds the fetched/updated object to the caller is a data-flow ownership
-# predicate, not a token in the signature. Those cases (I-04/I-02/I-06/I-07 in the
-# catalog) either already have a role checker or are reads that legitimately need no
-# role gate — so this rule is silent on every one of them, at any confidence. That
-# silence is the whole point of the AVE-vs-Semgrep comparison; see the sibling
-# README and score.py for the measured numbers.
+# predicate, not a token in the signature. I-04 already has a role checker and no
+# get_current_user, so this pattern does not match. I-06 and I-07 have
+# get_current_user and no role checker; they stay unmatched because GET is out of
+# scope, not because those tokens are inexpressible. I-02 is a mutation the rule
+# does flag, for the wrong class. That BOLA miss is the point of the
+# AVE-vs-Semgrep comparison; see the sibling README and score.py for the numbers.
 #
 # Scoping choices that keep the baseline credible (fair, not gamed either way):
 #   * state-changing methods only (post/put/delete/patch). Extending to GET reads was

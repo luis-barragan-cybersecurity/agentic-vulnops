@@ -15,10 +15,15 @@ Two scorings are reported, because they answer different questions:
 
   * location — a flag counts if it lands anywhere on an instance's handler, ignoring
     what it claims. This is the standard, *generous* SAST-benchmark measure.
-  * class-aware — a flag counts only if its class (this rule emits BFLA) matches the
-    instance's family. A BFLA "add a role check" verdict on a BOLA ownership gap is a
-    wrong-reason coincidence: applying it would not remove the flaw, so it is not a real
-    detection. This is the honest number for the semantic comparison.
+  * class-aware — a flag counts as a recall hit only if its class (this rule emits BFLA)
+    matches the instance's family. A BFLA "add a role check" verdict on a BOLA ownership
+    gap is not a detection (wrong-reason coincidence: applying it would not remove the
+    flaw) and is a wrong-class false positive for precision. This is the honest number
+    for the semantic comparison.
+
+Finding paths are stored and scored as TARGET_APP-relative `app/apis/...` keys, the same
+form as catalog `file` fields. Live semgrep may emit absolute paths; those are stripped
+on the way in and on the way out so frozen findings replay on any checkout.
 
 Run with semgrep on PATH (or point AVE_SEMGREP at the binary); with neither, it scores the
 committed `semgrep-findings.json` so the baseline is reproducible offline / in CI.
@@ -47,6 +52,7 @@ RESULTS = HERE / "results.json"
 
 # This rule detects one class only: missing function-level (role) authorization.
 RULE_CLASS = "BFLA"
+_APIS_MARKER = "app/apis/"
 
 
 def _semgrep_bin() -> str | None:
@@ -66,6 +72,30 @@ def run_semgrep(binary: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         sys.stderr.write(proc.stderr)
         raise
+
+
+def finding_rel_path(raw: str) -> str:
+    """Return a TARGET_APP-relative posix path in catalog `file` form (`app/apis/...`)."""
+    text = raw.replace("\\", "/")
+    idx = text.find(_APIS_MARKER)
+    if idx >= 0:
+        return text[idx:]
+    p = Path(raw)
+    try:
+        resolved = p.resolve() if p.is_absolute() else (TARGET_APP / p).resolve()
+        return resolved.relative_to(TARGET_APP.resolve()).as_posix()
+    except ValueError:
+        raise ValueError(f"finding path is not under the target app: {raw}") from None
+
+
+def portable_findings(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Copy Semgrep result rows with paths rewritten to catalog-relative form."""
+    out: list[dict[str, Any]] = []
+    for row in results:
+        copy = dict(row)
+        copy["path"] = finding_rel_path(str(row["path"]))
+        out.append(copy)
+    return out
 
 
 def enclosing_symbol(rel_path: str, line: int) -> str | None:
@@ -95,7 +125,7 @@ def score(sg: dict[str, Any]) -> dict[str, Any]:
     unlabelled_fps: list[str] = []      # flagged handlers absent from the catalog
 
     for r in sg.get("results", []):
-        rel = Path(r["path"]).resolve().relative_to(TARGET_APP).as_posix()
+        rel = finding_rel_path(str(r["path"]))
         sym = enclosing_symbol(rel, r["start"]["line"])
         inst = by_key.get((rel, sym))
         if inst is not None:
@@ -113,16 +143,20 @@ def score(sg: dict[str, Any]) -> dict[str, Any]:
     bfla = [i["id"] for i in instances if i["family"] == "BFLA"]
 
     # Class-aware: a BFLA rule only truly detects BFLA instances. A hit on a BOLA
-    # instance is a wrong-reason location overlap, not a detection.
+    # instance is a wrong-reason location overlap, not a recall hit, and a
+    # wrong-class false positive for precision.
     class_hits = sorted(i for i in detected if by_key_family(instances, i) == RULE_CLASS)
+    wrong_class = sorted(i for i in detected if by_key_family(instances, i) != RULE_CLASS)
     loc_hits = sorted(detected)
 
     n_decoy_fp = len(decoy_fps)
     n_unlab_fp = len(unlabelled_fps)
+    n_wrong_class = len(wrong_class)
 
-    def precision(tp: int) -> dict[str, Any]:
+    def precision(tp: int, *, include_wrong_class: bool) -> dict[str, Any]:
+        extra = n_wrong_class if include_wrong_class else 0
         labelled = tp + n_decoy_fp
-        overall = tp + n_decoy_fp + n_unlab_fp
+        overall = tp + n_decoy_fp + n_unlab_fp + extra
         return {
             "tp": tp,
             "precision_vs_decoys": round(tp / labelled, 3) if labelled else None,
@@ -132,26 +166,32 @@ def score(sg: dict[str, Any]) -> dict[str, Any]:
     return {
         "flagged_handlers": len(sg.get("results", [])),
         "detected_instances": detected,
-        "false_positives": {"decoys": sorted(set(decoy_fps)), "unlabelled": sorted(unlabelled_fps)},
+        "false_positives": {
+            "decoys": sorted(set(decoy_fps)),
+            "unlabelled": sorted(unlabelled_fps),
+            "wrong_class": wrong_class,
+        },
         "location_scoring": {
             "note": "generous: any flag overlapping an instance handler, class ignored",
             "instances_hit": loc_hits,
             "overall": recall([i["id"] for i in instances]),
             "bola": recall(bola),
             "bfla": recall(bfla),
-            "precision": precision(len(loc_hits)),
+            "precision": precision(len(loc_hits), include_wrong_class=False),
         },
         "class_aware_scoring": {
-            "note": f"honest: a flag counts only where its class ({RULE_CLASS}) matches "
-                    "the instance family; a role verdict on an ownership gap is discarded",
+            "note": f"honest: a flag is a recall hit only where its class ({RULE_CLASS}) "
+                    "matches the instance family; a role verdict on an ownership gap is "
+                    "a wrong-class false positive",
             "instances_hit": class_hits,
             "overall": {"hit": class_hits, "n": len(instances),
                         "recall": round(len(class_hits) / len(instances), 3)},
             "bola": {"hit": [], "n": len(bola), "recall": 0.0,
-                     "why": "a syntactic pattern cannot express object-ownership; this rule "
-                            "is silent on every ownership gap at any confidence"},
+                     "why": "a syntactic pattern cannot express object-ownership. I-04 is "
+                            "unmatched (role checker present, no get_current_user). I-06 "
+                            "and I-07 stay unmatched because GET is out of scope"},
             "bfla": recall(bfla),
-            "precision": precision(len(class_hits)),
+            "precision": precision(len(class_hits), include_wrong_class=True),
         },
     }
 
@@ -192,6 +232,7 @@ def render(res: dict[str, Any]) -> str:
         f"instances detected: {detected or 'none'}",
         f"decoy false positives: {', '.join(fp['decoys']) or 'none'}",
         f"unlabelled false positives: {', '.join(fp['unlabelled']) or 'none'}",
+        f"wrong-class false positives: {', '.join(fp['wrong_class']) or 'none'}",
         "",
         *_block("LOCATION scoring (generous: overlap only)", la, f"hit={la['bola']['hit']}"),
         "",
@@ -206,18 +247,17 @@ def render(res: dict[str, Any]) -> str:
 def main() -> int:
     binary = _semgrep_bin()
     if binary:
-        sg = run_semgrep(binary)
-        FROZEN_FINDINGS.write_text(json.dumps(sg.get("results", []), indent=2) + "\n")
-        source = f"live semgrep ({binary})"
+        sg = {"results": portable_findings(run_semgrep(binary).get("results", []))}
+        FROZEN_FINDINGS.write_text(json.dumps(sg["results"], indent=2) + "\n")
+        source = "live semgrep"
     elif FROZEN_FINDINGS.exists():
         sg = {"results": json.loads(FROZEN_FINDINGS.read_text())}
-        source = f"frozen {FROZEN_FINDINGS.name} (semgrep not on PATH)"
+        source = f"frozen {FROZEN_FINDINGS.name}"
     else:
         sys.stderr.write("semgrep not found and no frozen findings to score\n")
         return 2
 
     res = score(sg)
-    res["source"] = source
     RESULTS.write_text(json.dumps(res, indent=2) + "\n")
     print(render(res))
     print(f"\n[scored from: {source}; wrote {RESULTS.name}]")
