@@ -1,27 +1,151 @@
 # policy.yaml — governance-as-data (compounding export #2).
 #
-# The rules AVE obeys, expressed as data and never as prompt. A decision record MUST cite
-# this `version`. Scaffold only (ticket 02); ticket 05 fixes the full schema
-# (fix predicates, blast-radius limits, T0-T2 + re-attack requirements, per-ring stop
-# criteria, HITL routes).
+# The rules AVE obeys, expressed as DATA and never as prompt. Every decision record MUST
+# cite this `version`. The Decide node calls a pure `decide()` (src/ave/policy) that
+# consults this document and either returns a standing-preauthorized decision or routes to
+# a human at the interrupt() gate.
+#
+# Design stance: the policy is a *predicate machine*. AVE proposes a (finding, fix_plan,
+# measured_blast_radius); the policy answers AUTONOMOUS or one of four HITL routes. It
+# never answers "merge" — the verification ladder (below) and the invariant do that.
+#
+# Schema locked in wayfinding ticket 05 and landed here in ticket 08. The shape is
+# language- and vuln-family-neutral (D3): a future language pack reuses it unchanged.
 
-version: "0"
+version: "1.0.0"
 
-# What a valid fix must look like (predicates the fix diff is checked against).
-fix_predicates: []
+# -----------------------------------------------------------------------------
+# 1. FIX PREDICATES — what a valid, standing-preauthorized fix diff must satisfy.
+#    All predicates in `require_all` must hold for the change to be autonomous.
+#    Any violation routes to HITL `out_of_policy_change` (never a silent stop).
+# -----------------------------------------------------------------------------
+fix_predicates:
+  require_all:
+    # The signature semantic-fix shape: the diff only touches designated authorization
+    # helpers (a guard/dependency + its registration), not business logic. This is the
+    # "helper-only diff" — the reason the fix is class-level, not a one-call-site patch.
+    - id: helper_only_diff
+      kind: path_allowlist
+      description: >
+        Every changed path must fall inside an authorization-helper surface. A change
+        that edits a route handler's business logic, a model, or a serializer is NOT
+        helper-only and is out of policy.
+      allow_globs:
+        - "app/**/authorization.py"       # the ownership/role guard module
+        - "app/**/dependencies.py"        # FastAPI dependency wiring
+        - "app/**/deps.py"
+      forbid_globs:
+        - "app/**/models.py"
+        - "app/**/schemas.py"
+        - "app/**/*_service.py"
 
-# Caller/PR-level blast-radius limits a change may not exceed.
+    # The fix must remove the class, not the instance: it lands on a shared helper that
+    # every object-by-id / privileged-verb call site routes through, so re-introducing
+    # the same flaw elsewhere is structurally harder.
+    - id: class_level
+      kind: boolean_flag
+      description: >
+        Fix modifies a shared authorization primitive applied by dependency injection to
+        the whole route class, not an `if user.id == ...` inlined at one endpoint.
+      expects: fix_plan.is_class_level == true
+
+    # No behavioural change for a legitimate owner/role — the fix denies the attacker,
+    # never breaks the rightful caller. Enforced downstream by the T2 suite + re-attack,
+    # asserted here as an intent the record must carry.
+    - id: no_legitimate_regression
+      kind: boolean_flag
+      expects: fix_plan.preserves_legitimate_access == true
+
+# -----------------------------------------------------------------------------
+# 2. BLAST-RADIUS LIMITS — the size of change a standing preauthorization covers.
+#    Exceeding any hard limit → HITL `blast_radius_exceeded`.
+#    A radius that cannot be measured at all → HITL `unknown_blast_radius`.
+# -----------------------------------------------------------------------------
 blast_radius:
-  max_callers: null
+  max_files: 3            # helper module + its registration + at most one guard test file
+  max_dependents: 25      # call sites transitively affected by the changed helper
+  max_routes: 15          # HTTP routes whose behaviour the change can alter
+  # If any dimension is null/unmeasured on the finding, treat as unknown → escalate.
+  require_all_dimensions_measured: true
 
-# The verification ladder every ready-to-merge PR must pass.
+# -----------------------------------------------------------------------------
+# 3. VERIFICATION LADDER — every ready-to-merge PR must pass all four rungs.
+#    This is the invariant, expressed as the data CI re-derives from the run record.
+#    The exploit oracle has INVERTED polarity: green while vulnerable, red once fixed.
+# -----------------------------------------------------------------------------
 verification_ladder:
-  require_t0_build: true
-  require_t1_exploit_oracle_flipped: true
-  require_t2_full_suite: true
-  require_reattack: true
+  require_all:
+    - t0_build                    # the target builds / imports after the change
+    - t1_exploit_oracle_flipped   # bound by-path oracle: was-exploitable -> now-blocked
+    - t2_full_suite               # the target's own test suite stays green (no regression)
+    - reattack_clean              # the original attack, replayed post-fix, is denied
+  # A rung that was green and later goes red counts as a change-failure (metric #4).
 
-# Where a human must be in the loop.
+# -----------------------------------------------------------------------------
+# 4. RINGS — the deployment rings a change advances through, and the stop criterion
+#    that gates each hop. v1 designs caller -> pr; execution beyond PR is out of scope
+#    (rings named, not run). A failed stop criterion → HITL `failed_stop_criterion`.
+# -----------------------------------------------------------------------------
+rings:
+  order: [caller, pr]
+  stop_criteria:
+    # caller ring: the fix is proven against the single exploited call path.
+    caller:
+      require:
+        - t1_exploit_oracle_flipped
+        - reattack_clean
+      on_fail: failed_stop_criterion
+    # pr ring: full ladder green + decision record present + within blast radius.
+    pr:
+      require:
+        - t0_build
+        - t2_full_suite
+        - decision_record_present
+        - within_blast_radius
+      on_fail: failed_stop_criterion
+  # Rings past `pr` (canary/fleet) are out of scope for v1 — designed here, not executed.
+  out_of_scope_beyond: pr
+
+# -----------------------------------------------------------------------------
+# 5. HITL ROUTES — the four conditions that put a human in the loop. Each names the
+#    gate it fires at and what the human is asked to approve. The graph pauses at the
+#    interrupt() before Prepare; these routes decide WHY a pause is mandatory vs. a
+#    standing-preauthorized flow-through (where the human reviews but need not act).
+# -----------------------------------------------------------------------------
 hitl_routes:
-  - gate: before_prepare
-    approves: decision_record
+  - route: out_of_policy_change
+    when: a fix predicate in section 1 fails
+    gate: before_prepare
+    approves: the out-of-policy diff (human may amend policy or reject the fix)
+  - route: blast_radius_exceeded
+    when: any blast_radius hard limit in section 2 is exceeded
+    gate: before_prepare
+    approves: proceeding despite an oversized radius
+  - route: failed_stop_criterion
+    when: a ring stop criterion in section 4 is not met
+    gate: before_execute
+    approves: advancing the change past the failed ring
+  - route: unknown_blast_radius
+    when: blast radius cannot be measured on the finding (a dimension is null)
+    gate: before_prepare
+    approves: proceeding without a measured radius
+
+# -----------------------------------------------------------------------------
+# 6. decide() — the pure signature the Decide node calls. Documented here as the
+#    contract; implemented in src/ave/policy/decide.py.
+#
+#   decide(finding, fix_plan, blast_radius, policy) -> Decision
+#     Decision = Autonomous(decision_record)                  # standing preauth holds
+#              | Escalation(route, decision_record_draft)      # one of the 4 routes above
+#
+#   Pure: no I/O, no clock (a timestamp is passed in), no PR side effects. Same inputs
+#   -> same Decision. The clock/PR/oracle live in the Execute/Verify nodes, never in
+#   decide(), so CI can re-derive the verdict from the committed record.
+# -----------------------------------------------------------------------------
+decide:
+  signature: "decide(finding, fix_plan, blast_radius, policy) -> Decision"
+  standing_preauthorization: >
+    A finding whose fix satisfies every section-1 predicate and stays within every
+    section-2 limit is standing-preauthorized: decide() returns Autonomous and the human
+    at the interrupt() gate reviews rather than unblocks. Anything else is an Escalation
+    naming exactly one route from section 5.

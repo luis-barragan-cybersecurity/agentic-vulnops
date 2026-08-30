@@ -53,7 +53,10 @@ class PythonAuthzPack:
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
         """Caller/PR-level reach of the fix. For the anchor this is the one endpoint and
-        its route; ticket 06 designs the reviewer-facing visual, this is its data."""
+        its route; ticket 06 designs the reviewer-facing visual, this is its data. The
+        `files`/`dependents`/`routes` keys are the policy-facing dimensions the governance
+        predicate is measured against (ticket 05/08): the class-level guard touches two
+        helper files, one dependent call site, one route."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         return {
@@ -61,6 +64,26 @@ class PythonAuthzPack:
             "callers": ["route:GET /orders/{order_id}"],
             "max_callers": 1,
             "rings": ["caller", "pr"],
+            "files": 2,
+            "dependents": 1,
+            "routes": 1,
+        }
+
+    def fix_plan(self, finding: Finding) -> dict[str, Any]:
+        """The proposed class-level remediation surface for the anchor: route object reads
+        through a shared ownership guard rather than inlining an `if user.id == ...` check
+        at the one endpoint. Helper-only by construction, so the policy's fix predicates
+        pass and the change is standing-preauthorized. `prepare_fix` realizes it as a patch
+        (an in-process model for v1, per its caveat)."""
+        if not self._is_anchor(finding):
+            raise _no_oracle(finding)
+        return {
+            "changed_paths": [
+                "app/apis/orders/authorization.py",
+                "app/apis/orders/dependencies.py",
+            ],
+            "is_class_level": True,
+            "preserves_legitimate_access": True,
         }
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:
