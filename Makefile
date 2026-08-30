@@ -6,7 +6,7 @@ PYTHON ?= python3
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup lint typecheck test check eval run break eradicate scoreboard clean
+.PHONY: help setup lint typecheck test check eval run break eradicate scoreboard baseline clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -40,6 +40,10 @@ eradicate: ## Demo: break -> auto-approved run -> PR bundle (HITL does not pause
 
 scoreboard: ## Regenerate the results table from run records (demo step 4)
 	$(PYTHON) -m ave.cli scoreboard
+
+baseline: ## Score the pattern-scanner baseline AVE must beat (ticket 07)
+	@command -v semgrep >/dev/null 2>&1 || $(PYTHON) -m pip install --quiet semgrep || true
+	$(PYTHON) evals/baseline/semgrep/score.py
 
 clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache build dist *.egg-info htmlcov .coverage

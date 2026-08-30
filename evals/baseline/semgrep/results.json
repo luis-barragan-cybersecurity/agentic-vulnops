@@ -1,0 +1,95 @@
+{
+  "flagged_handlers": 6,
+  "detected_instances": {
+    "I-02": "update_profile",
+    "I-01": "delete_menu_item",
+    "I-08": "update_menu_item",
+    "I-03": "update_user_role"
+  },
+  "false_positives": {
+    "decoys": [
+      "D-05"
+    ],
+    "unlabelled": [
+      "app/apis/referrals/service.py:apply_referral_code"
+    ]
+  },
+  "location_scoring": {
+    "note": "generous: any flag overlapping an instance handler, class ignored",
+    "instances_hit": [
+      "I-01",
+      "I-02",
+      "I-03",
+      "I-08"
+    ],
+    "overall": {
+      "hit": [
+        "I-01",
+        "I-02",
+        "I-03",
+        "I-08"
+      ],
+      "n": 8,
+      "recall": 0.5
+    },
+    "bola": {
+      "hit": [
+        "I-02"
+      ],
+      "n": 4,
+      "recall": 0.25
+    },
+    "bfla": {
+      "hit": [
+        "I-01",
+        "I-03",
+        "I-08"
+      ],
+      "n": 4,
+      "recall": 0.75
+    },
+    "precision": {
+      "tp": 4,
+      "precision_vs_decoys": 0.8,
+      "precision_all_flags": 0.667
+    }
+  },
+  "class_aware_scoring": {
+    "note": "honest: a flag counts only where its class (BFLA) matches the instance family; a role verdict on an ownership gap is discarded",
+    "instances_hit": [
+      "I-01",
+      "I-03",
+      "I-08"
+    ],
+    "overall": {
+      "hit": [
+        "I-01",
+        "I-03",
+        "I-08"
+      ],
+      "n": 8,
+      "recall": 0.375
+    },
+    "bola": {
+      "hit": [],
+      "n": 4,
+      "recall": 0.0,
+      "why": "a syntactic pattern cannot express object-ownership; this rule is silent on every ownership gap at any confidence"
+    },
+    "bfla": {
+      "hit": [
+        "I-01",
+        "I-03",
+        "I-08"
+      ],
+      "n": 4,
+      "recall": 0.75
+    },
+    "precision": {
+      "tp": 3,
+      "precision_vs_decoys": 0.75,
+      "precision_all_flags": 0.6
+    }
+  },
+  "source": "live semgrep (/home/hackeye/.claude/jobs/c5c8776a/tmp/sgvenv/bin/semgrep)"
+}
