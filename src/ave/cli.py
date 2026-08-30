@@ -3,15 +3,17 @@
 Backs the Makefile verbs and the `ave` console script.
 
   ave run         -> walk the seven-phase graph on one seeded instance, write artifacts
-  ave break       -> seed a semantic ownership flaw into the target (demo step 1)
+  ave break       -> report the semantic flaws already seeded in the target (demo step 1)
   ave eradicate   -> break -> run -> HITL approve -> PR (demo steps 1-3)
   ave scoreboard  -> regenerate the results table from run records (demo step 4)
 
-The walking skeleton (ticket 03) makes `run` real end to end against the `python_authz`
-pack's single synthetic instance: it walks all seven phases and writes a run record +
-PR bundle under `results/runs/<id>/`. The HITL gate is in the graph; the CLI
-auto-approves and does not pause. `break` and `scoreboard` stay thin until the real
-target (ticket 04) and the metrics/schema work (ticket 05).
+The walking skeleton (ticket 03) makes `run` real end to end: it walks all seven phases
+and writes a run record + PR bundle under `results/runs/<id>/`. Ticket 04 pointed the pack
+at the real vendored target (`target/catalog.json`, 8 authorization instances). `run`
+drives the one instance the pack declares, the anchor I-04, on a hermetic oracle; the
+other seven stay ground truth for scoring. The HITL gate is in the graph; the CLI
+auto-approves and does not pause. `break` and `scoreboard` stay thin until the
+metrics/schema work (ticket 05).
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ def _run(_: argparse.Namespace) -> int:
     tracer = setup_tracing()
     with tracer.start_as_current_span("ave.run"):
         initial: AVEState = {
-            "target_ref": "skeleton://python_authz/bola-order-owner",
+            "target_ref": "target/dvrestaurant@d32d0997",
             "policy_version": policy_version(),
         }
         print("run: walking seven phases; HITL gate auto-approves (no pause).")
@@ -44,8 +46,8 @@ def _run(_: argparse.Namespace) -> int:
 
 
 def _break(_: argparse.Namespace) -> int:
-    print("break: would seed a semantic ownership flaw into the real target (ticket 04).")
-    print("       the skeleton run uses the python_authz pack's built-in BOLA instance.")
+    print("break: the vendored target already carries the seeded catalog (target/CATALOG.md,")
+    print("       8 authorization instances + decoys). `run` drives the BOLA anchor (I-04).")
     return 0
 
 
@@ -68,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for name, handler, help_text in (
         ("run", _run, "walk the seven-phase graph on one seeded instance, write artifacts"),
-        ("break", _break, "seed a semantic ownership flaw into the target (demo step 1)"),
+        ("break", _break, "report the semantic flaws already seeded in the target"),
         ("eradicate", _eradicate, "break -> run -> HITL approve -> PR (demo)"),
         ("scoreboard", _scoreboard, "regenerate the results table from run records"),
     ):

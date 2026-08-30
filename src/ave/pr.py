@@ -51,6 +51,10 @@ def render_pr_body(state: AVEState) -> str:
     lines.append(f"- rings: {', '.join(blast.get('rings', [])) or '—'}")
     lines.append("")
     lines.append("## Patch")
+    caveat = change.get("patch_caveat")
+    if caveat:
+        lines.append(f"> {caveat}")
+        lines.append("")
     lines.append("```diff")
     lines.append((change.get("patch") or "").rstrip("\n"))
     lines.append("```")

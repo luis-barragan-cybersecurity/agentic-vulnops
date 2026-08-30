@@ -32,7 +32,7 @@ eval: ## Run promptfoo eval suites against the real graph
 run: ## Walk the seven-phase graph on one seeded instance, write artifacts
 	$(PYTHON) -m ave.cli run
 
-break: ## Seed a semantic ownership flaw into the target (demo step 1)
+break: ## Report the semantic flaws already seeded in the target (demo step 1)
 	$(PYTHON) -m ave.cli break
 
 eradicate: ## Demo: break -> auto-approved run -> PR bundle (HITL does not pause)

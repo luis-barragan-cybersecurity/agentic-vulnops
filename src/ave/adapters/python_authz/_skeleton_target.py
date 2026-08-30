@@ -1,15 +1,18 @@
-"""Synthetic 'code under review' for the walking skeleton — one minimal BOLA
-(object-ownership) instance.
+"""Hermetic in-process oracle for the loop **anchor** (catalog instance I-04 — the
+`get_order` object-ownership BOLA gap).
 
-This stands in for the real vendored Damn Vulnerable RESTaurant fork, which ticket 04
-brings in as an 8-12 instance catalog with decoys. The skeleton needs exactly one real
-case to walk the loop end to end; this is it. BOLA (missing object-ownership check) is
-the L2 semantic anchor from the target survey — the family a pattern scanner structurally
+Ticket 04 pointed the pack at the real vendored target, whose catalog
+(`target/catalog.json`, 8 instances + decoys) the pack declares exactly one finding from:
+this anchor. The module is retained as that anchor's **in-process oracle model**: two
+implementations of the same endpoint — vulnerable and fixed — plus the exploit oracle
+(inverted polarity) and a legitimate-use check. The loop drives I-04 through this model so
+`make check` runs without standing up the target's Python-3.10 / FastAPI-0.103
+environment. The anchor's canonical by-path oracle is
+`target/dvrestaurant/app/tests/vulns/ave_seed_bola_order_read.py` (verified to flip);
+wiring the loop to run the by-path oracles of the other instances is the next deepening.
+
+BOLA (missing object-ownership check) is the semantic family a pattern scanner structurally
 cannot see, which is the whole point of AVE.
-
-Two implementations of the same endpoint — vulnerable and fixed — plus the exploit oracle
-(inverted polarity) and a legitimate-use check. The `python_authz` pack reads this module
-as its finding source and its fix template; ticket 04 repoints the pack at the real target.
 """
 
 from __future__ import annotations

@@ -2,7 +2,8 @@
 
 Surface candidate findings from the target via the language pack. The pack fans in rule
 and model findings behind the adapter seam; the core only ever sees neutral `Finding`
-records. Skeleton: the `python_authz` pack returns one BOLA object-ownership gap.
+records. Skeleton: the pack declares one finding, the loop anchor it can drive end to end.
+The target catalogue's remaining instances are ground truth for scoring, not pack output.
 """
 
 from __future__ import annotations
