@@ -20,7 +20,9 @@ def assess(state: AVEState) -> AVEState:
     selected = findings[0] if findings else None
     assessment: dict[str, Any] = {"reasoned": selected is not None}
     if selected is not None:
-        assessment["blast_radius"] = get_default_pack().blast_radius(selected)
+        pack = get_default_pack()
+        assessment["blast_radius"] = pack.blast_radius(selected)
+        assessment["fix_plan"] = pack.fix_plan(selected)
     return {
         "selected_finding": selected,
         "assessment": assessment,

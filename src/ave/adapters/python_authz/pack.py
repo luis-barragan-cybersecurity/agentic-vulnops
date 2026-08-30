@@ -53,7 +53,10 @@ class PythonAuthzPack:
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
         """Caller/PR-level reach of the fix. For the anchor this is the one endpoint and
-        its route; ticket 06 designs the reviewer-facing visual, this is its data."""
+        its route; ticket 06 designs the reviewer-facing visual, this is its data. The
+        `files`/`dependents`/`routes` keys are the policy-facing dimensions the governance
+        predicate is measured against (ticket 05/08): the class-level guard touches two
+        helper files, one dependent call site, one route."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         return {
@@ -61,6 +64,31 @@ class PythonAuthzPack:
             "callers": ["route:GET /orders/{order_id}"],
             "max_callers": 1,
             "rings": ["caller", "pr"],
+            "files": 2,
+            "dependents": 1,
+            "routes": 1,
+        }
+
+    def fix_plan(self, finding: Finding) -> dict[str, Any]:
+        """The proposed class-level remediation surface for the anchor: route object reads
+        through a shared ownership guard rather than inlining an `if user.id == ...` check
+        at the one endpoint. These are the files a *real* fix would touch; they fall inside
+        the policy's helper-only allowlist, so `decide()` grants standing preauthorization
+        on the plan. `decide()` judges this proposal at Decide-time (before Prepare);
+        re-checking the *realized* patch against the same predicate is the before_execute
+        ring gate's job (deferred, ticket 09). In the walking skeleton `prepare_fix` models
+        the diff in-process, so its headers name `_skeleton_target.py`, not these files
+        (caveated on the PreparedFix); on a real target the realized patch touches exactly
+        these paths and that re-check agrees."""
+        if not self._is_anchor(finding):
+            raise _no_oracle(finding)
+        return {
+            "changed_paths": [
+                "app/apis/orders/authorization.py",
+                "app/apis/orders/dependencies.py",
+            ],
+            "is_class_level": True,
+            "preserves_legitimate_access": True,
         }
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:

@@ -3,9 +3,12 @@
 The stable interface a per-language adapter plugs into. The seam is now **real** — defined
 in [`base.py`](base.py) as the `LanguagePack` protocol — and v1's single pack is landed.
 
-- **The seam** (`base.LanguagePack`): a pack supplies four capabilities — finding sources
-  (`find`), blast-radius extraction (`blast_radius`), fix templates (`prepare_fix`), and an
-  exploit-oracle harness (`run_exploit` + `legitimate_use_holds`, inverted polarity).
+- **The seam** (`base.LanguagePack`): a pack supplies five capabilities — finding sources
+  (`find`), blast-radius extraction (`blast_radius`), a proposed remediation surface the
+  policy is judged over (`fix_plan`), fix templates that realize it as a patch
+  (`prepare_fix`), and an exploit-oracle harness (`run_exploit` + `legitimate_use_holds`,
+  inverted polarity). `fix_plan` is the Decide-time proposal; `prepare_fix` the Prepare-time
+  realization.
 - **v1's pack** (`python_authz/`): Python/FastAPI, BOLA/BFLA. Landed by the walking skeleton
   (ticket 03); ticket 04 pointed it at the real vendored target (`target/catalog.json`,
   8 authorization instances + decoys, each bound to a by-path exploit oracle). `find()`

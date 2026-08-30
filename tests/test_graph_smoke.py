@@ -5,10 +5,14 @@ from __future__ import annotations
 
 from ave.graph import HITL_GATE_BEFORE
 from ave.phases import PHASE_ORDER
+from ave.policy import policy_version
 from ave.runner import paused_at_gate, run_once
 from ave.state import AVEState
 
-_INITIAL: AVEState = {"target_ref": "skeleton://python_authz/bola-order-owner", "policy_version": "0"}
+_INITIAL: AVEState = {
+    "target_ref": "skeleton://python_authz/bola-order-owner",
+    "policy_version": policy_version(),
+}
 
 
 def test_phase_order_is_the_seven_phases() -> None:

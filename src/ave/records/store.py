@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ave.records.run_record import PhaseSpan, RunRecord
+from ave.records.run_record import FindingLifecycle, PhaseSpan, RunRecord
 from ave.state import AVEState
 
 
@@ -32,6 +32,37 @@ def make_span(phase: str, started_at: str, attributes: dict[str, Any]) -> dict[s
         "ended_at": now_iso(),
         "attributes": attributes,
     }
+
+
+def _span_start(spans: list[dict[str, Any]], phase: str) -> str | None:
+    """The start timestamp of the first span for `phase`, if the phase ran."""
+    return next((s.get("started_at") for s in spans if s.get("phase") == phase), None)
+
+
+def _finding_lifecycle(state: AVEState) -> FindingLifecycle | None:
+    """Synthesize the selected finding's lifecycle from the run's spans.
+
+    `first_observed_at` is first-observed-in-run: the run's own start (intake). `triaged_at`
+    is when Decide produced the record; `verified_at` is set only if the ladder greened and
+    the PR is ready-to-merge — otherwise the finding stays `open` (the honest v1 state, where
+    only T1 flips). Metrics flat-map these across runs.
+    """
+    selected = state.get("selected_finding")
+    if not selected:
+        return None
+    spans = state.get("spans", [])
+    first_observed = _span_start(spans, "intake") or _span_start(spans, "match")
+    if first_observed is None:
+        return None
+    ready = bool(state.get("ready_to_merge"))
+    verified_at = _span_start(spans, "verify") if ready else None
+    return FindingLifecycle(
+        finding_id=str(selected.get("id", "unknown")),
+        first_observed_at=first_observed,
+        triaged_at=_span_start(spans, "decide"),
+        verified_at=verified_at,
+        outcome="verified_fixed" if ready else "open",
+    )
 
 
 def build_run_record(state: AVEState) -> RunRecord:
@@ -52,6 +83,10 @@ def build_run_record(state: AVEState) -> RunRecord:
                 attributes=span.get("attributes", {}),
             )
         )
+    lifecycle = _finding_lifecycle(state)
+    if lifecycle is not None:
+        record.findings.append(lifecycle)
+    # v1's loop always fixes: no accepted-risk / deferred exceptions yet (see run_record).
     return record
 
 

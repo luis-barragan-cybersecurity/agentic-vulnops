@@ -1,7 +1,7 @@
 """Load and version the governance policy.
 
-Scaffold only (ticket 02): reads the YAML and exposes its version. Ticket 05 defines the
-full predicate/blast-radius/ladder schema and a pure `decide()` that consults it.
+Reads `policy.yaml` and exposes its version. The full predicate/blast-radius/ladder schema
+it carries, and the pure `decide()` that consults it, landed in ticket 08 (`ave.policy`).
 """
 
 from __future__ import annotations

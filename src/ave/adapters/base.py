@@ -44,7 +44,16 @@ class LanguagePack(Protocol):
         ...
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
-        """The caller/PR-level reach of a change to this finding's symbol."""
+        """The caller/PR-level reach of a change to this finding's symbol. Carries the
+        policy-facing dimensions `files` / `dependents` / `routes` the governance
+        predicate is measured against, alongside the reviewer-facing caller view."""
+        ...
+
+    def fix_plan(self, finding: Finding) -> dict[str, Any]:
+        """The *proposed* class-level remediation surface, before the concrete patch
+        (`prepare_fix`). Keys: `changed_paths` (repo-relative files the fix would touch),
+        `is_class_level`, `preserves_legitimate_access`. The Decide node evaluates the
+        policy's fix predicates over this proposal; `prepare_fix` later realizes it."""
         ...
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:

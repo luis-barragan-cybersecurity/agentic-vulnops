@@ -16,13 +16,16 @@ from ave.adapters import get_default_pack
 from ave.adapters.python_authz import catalog
 from ave.invariant import invariant_holds
 from ave.phases.verify import verify
+from ave.policy import policy_version
 from ave.records.store import build_run_record
 from ave.runner import persist_run, run_once
 from ave.state import AVEState
 
+# Seed the run with the policy version decide() will actually cite, so a single run's
+# decision record and run record agree on one version (not the scaffold's "0").
 _INITIAL: AVEState = {
     "target_ref": "target/dvrestaurant@d32d0997",
-    "policy_version": "0",
+    "policy_version": policy_version(),
 }
 
 
@@ -103,6 +106,8 @@ def test_non_anchor_instances_are_not_claimed() -> None:
 
     with pytest.raises(NotImplementedError, match="I-03"):
         pack.blast_radius(other)
+    with pytest.raises(NotImplementedError, match="I-03"):
+        pack.fix_plan(other)
     with pytest.raises(NotImplementedError, match="I-03"):
         pack.prepare_fix(other)
     with pytest.raises(NotImplementedError, match="I-03"):
