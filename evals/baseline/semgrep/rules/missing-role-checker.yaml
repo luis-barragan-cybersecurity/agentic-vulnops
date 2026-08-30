@@ -1,0 +1,72 @@
+# The role-pattern baseline AVE must beat (build ticket 07).
+#
+# This is a deliberately *competent* Semgrep rule, not a strawman: it encodes the
+# strongest thing a syntactic pattern scanner can honestly do for authorization —
+# flag a privileged, state-changing route handler that authenticates its caller but
+# carries no role dependency (RolesBasedAuthChecker). That catches missing
+# function-level checks (BFLA) where the gate is simply absent.
+#
+# What it *structurally cannot* do is object-level authorization (BOLA): whether a
+# handler binds the fetched/updated object to the caller is a data-flow ownership
+# predicate, not a token in the signature. I-04 already has a role checker and no
+# get_current_user, so this pattern does not match. I-06 and I-07 have
+# get_current_user and no role checker; they stay unmatched because GET is out of
+# scope, not because those tokens are inexpressible. I-02 is a mutation the rule
+# does flag, for the wrong class. That BOLA miss is the point of the
+# AVE-vs-Semgrep comparison; see the sibling README and score.py for the numbers.
+#
+# Scoping choices that keep the baseline credible (fair, not gamed either way):
+#   * state-changing methods only (post/put/delete/patch). Extending to GET reads was
+#     tried and rejected: it floods precision with false positives on correct reads
+#     (get_profile, hand-rolled-ownership decoy D-03) while still detecting zero
+#     ownership gaps — patterns can flag a missing *decorator*, never a missing
+#     ownership *predicate*.
+#   * caller-authenticated only (Depends(get_current_user) present). This excludes
+#     genuinely public endpoints (login, register, password reset) that correctly
+#     have no user gate, so they are not counted against Semgrep as false positives.
+rules:
+  - id: missing-role-checker-on-privileged-mutation
+    languages: [python]
+    severity: WARNING
+    message: >-
+      This state-changing route handler authenticates the caller
+      (Depends(get_current_user)) but declares no RolesBasedAuthChecker role
+      dependency. Any authenticated user, regardless of role, can invoke it —
+      a possible missing function-level authorization check (BFLA). If a role
+      gate is required, add auth=Depends(RolesBasedAuthChecker([...])).
+    metadata:
+      family: BFLA
+      baseline: ave-semgrep-baseline
+      references:
+        - https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/
+    patterns:
+      # A route handler for a state-changing HTTP method...
+      - pattern-either:
+          - pattern: |
+              @router.$METHOD(...)
+              def $H(..., $A: Annotated[$U, Depends(get_current_user)], ...):
+                ...
+          - pattern: |
+              @router.$METHOD(...)
+              async def $H(..., $A: Annotated[$U, Depends(get_current_user)], ...):
+                ...
+          - pattern: |
+              @router.$METHOD(...)
+              def $H(..., $A=Depends(get_current_user), ...):
+                ...
+          - pattern: |
+              @router.$METHOD(...)
+              async def $H(..., $A=Depends(get_current_user), ...):
+                ...
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(post|put|delete|patch)$
+      # ...that carries no role dependency anywhere in its signature.
+      - pattern-not: |
+          @router.$METHOD(...)
+          def $H(..., $B=Depends(RolesBasedAuthChecker(...)), ...):
+            ...
+      - pattern-not: |
+          @router.$METHOD(...)
+          async def $H(..., $B=Depends(RolesBasedAuthChecker(...)), ...):
+            ...
