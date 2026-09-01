@@ -1,12 +1,12 @@
 {
-  "run_id": "42625242c5b6487788cdace344115cd9",
+  "run_id": "7ad4021795d94b5e9acb4367d0fd25b9",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-08-30T21:56:12.646391+00:00",
-      "ended_at": "2026-08-30T21:56:12.648329+00:00",
+      "started_at": "2026-09-01T10:30:43.695552+00:00",
+      "ended_at": "2026-09-01T10:30:43.696576+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,50 +14,50 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-08-30T21:56:12.649204+00:00",
-      "ended_at": "2026-08-30T21:56:12.649477+00:00",
+      "started_at": "2026-09-01T10:30:43.697154+00:00",
+      "ended_at": "2026-09-01T10:30:43.697464+00:00",
       "attributes": {
         "found": 1
       }
     },
     {
       "phase": "assess",
-      "started_at": "2026-08-30T21:56:12.650722+00:00",
-      "ended_at": "2026-08-30T21:56:12.650738+00:00",
+      "started_at": "2026-09-01T10:30:43.698783+00:00",
+      "ended_at": "2026-09-01T10:30:43.698795+00:00",
       "attributes": {
         "selected": true
       }
     },
     {
       "phase": "decide",
-      "started_at": "2026-08-30T21:56:12.651738+00:00",
-      "ended_at": "2026-08-30T21:56:12.656048+00:00",
+      "started_at": "2026-09-01T10:30:43.699097+00:00",
+      "ended_at": "2026-09-01T10:30:43.701832+00:00",
       "attributes": {
-        "route": "standing_preauthorized",
-        "hitl_route": null,
-        "autonomous": true
+        "route": "hitl_approved",
+        "hitl_route": "unknown_blast_radius",
+        "autonomous": false
       }
     },
     {
       "phase": "prepare",
-      "started_at": "2026-08-30T21:56:12.658495+00:00",
-      "ended_at": "2026-08-30T21:56:12.658729+00:00",
+      "started_at": "2026-09-01T10:30:43.706176+00:00",
+      "ended_at": "2026-09-01T10:30:43.706375+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-08-30T21:56:12.659820+00:00",
-      "ended_at": "2026-08-30T21:56:12.659826+00:00",
+      "started_at": "2026-09-01T10:30:43.707142+00:00",
+      "ended_at": "2026-09-01T10:30:43.707146+00:00",
       "attributes": {
-        "pr_ref": "local:pr/42625242c5b6487788cdace344115cd9"
+        "pr_ref": "local:pr/7ad4021795d94b5e9acb4367d0fd25b9"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-08-30T21:56:12.661205+00:00",
-      "ended_at": "2026-08-30T21:56:12.661221+00:00",
+      "started_at": "2026-09-01T10:30:43.707889+00:00",
+      "ended_at": "2026-09-01T10:30:43.707902+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -67,8 +67,8 @@
   "findings": [
     {
       "finding_id": "I-04",
-      "first_observed_at": "2026-08-30T21:56:12.646391+00:00",
-      "triaged_at": "2026-08-30T21:56:12.651738+00:00",
+      "first_observed_at": "2026-09-01T10:30:43.695552+00:00",
+      "triaged_at": "2026-09-01T10:30:43.699097+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
