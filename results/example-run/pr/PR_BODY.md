@@ -1,18 +1,91 @@
 # AVE fix: Enforce object ownership in get_order (BOLA class-level fix)
 
-**Finding** `bola-order-owner` — object-ownership-gap at `ave.adapters.python_authz._skeleton_target:get_order_vulnerable`
-**Target** `skeleton://python_authz/bola-order-owner` · pack `python_authz` · policy `0`
+**Finding** `I-04` — object-ownership-gap at `app/apis/orders/services/get_order_service.py:get_order`
+**Target** `target/dvrestaurant@d32d0997` · pack `python_authz` · policy `1.0.0`
 
-## Why (decision record)
-Class-level fix removes the object-ownership-gap at ave.adapters.python_authz._skeleton_target:get_order_vulnerable (fixes the whole class, not one call site).
-_Authorized by:_ helper-only diff within blast-radius limits; verification ladder required
+## The attack, and the deny that replaced it
+
+> **Exchange not captured by this run.** The exploit oracle ran through the pack's harness, which records an oracle result but no HTTP request or response. The ladder below shows what this run proved; no transcript is inferred from that result.
+
+- Endpoint under attack: `GET /orders/{order_id}`
+- Bound exploit oracle (inverted polarity): `app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read` — it *passes* by succeeding at the attack, so a fix must flip it red.
+- What this run proved appears in the verification ladder below.
+
+## Verification ladder
+
+| Rung | Status | Evidence |
+|---|---|---|
+| T0 — target builds | ⬜ not green | — |
+| T1 — exploit oracle flipped (green → red) | ✅ | `app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read` flipped green → red |
+| T2 — target's own suite | ⬜ not green | — |
+| Re-attack — original attack replayed post-fix | ⬜ not green | — |
+
+An unrun rung is never painted green — “⬜ not green” means the rung did not run or did not pass, and is not claimed.
+
+**Ready to merge: no**
 
 ## Blast radius
-- changed symbol: `get_order`
-- callers: route:GET /orders/{order_id}
-- rings: caller, pr
 
-## Patch
+| Dimension | Measured | Limit (policy `1.0.0`) |
+|---|---|---|
+| Files changed | unmeasured | 3 |
+| Dependent call sites | unmeasured | 25 |
+| Routes affected | unmeasured | 15 |
+
+### The one fact
+
+**Unproven.** This run emitted no measured blast-radius fact, so no claim is made in its place.
+
+### Still open
+
+This run's finding sources surfaced no other instances. (v1 surfaces the loop anchor only; the find-stage fills this block from what it actually finds — the catalog's answer key stays off this path.)
+
+### Cleared
+
+Nothing was checked-and-ruled-out by this run, so nothing is listed. (Fills with the find-stage blast-radius pass.)
+
+### Before you merge
+
+Runnable by the reviewer, and allowed to fail:
+
+```bash
+# expect: FAILS after this fix (inverted polarity — this test IS the attack); needs the target's pinned Poetry/Docker env
+cd target/dvrestaurant && poetry run pytest app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read
+```
+```bash
+# expect: green — the target's own suite (the T2 rung; the ladder above is honest about not having run it)
+cd target/dvrestaurant && poetry run pytest app/tests
+```
+
+**Rings:** planned for `caller` → `pr`. This run does not execute deployment rings or enforce their stop criteria.
+
+<details>
+<summary><b>Decision record</b> (two-part: response × execution)</summary>
+
+**Part 1 — Response decision**
+- Classification: object-ownership-gap
+- Disposition: **fix** · Severity: high
+- Remediation: Close the whole object-ownership-gap class at app/apis/orders/services/get_order_service.py:get_order in one class-level change, not the single instance, without regressing legitimate access.
+- Scope (the class removed): the whole object-ownership-gap class, not just app/apis/orders/services/get_order_service.py:get_order
+
+**Part 2 — Execution route**
+- Route: **hitl_approved** · HITL route fired: **unknown_blast_radius**
+- Rule matched: `blast_radius.require_all_dimensions_measured`
+- Blast radius: files unmeasured / dependents unmeasured / routes unmeasured
+- Ladder required: `t0_build`, `t1_exploit_oracle_flipped`, `t2_full_suite`, `reattack_clean`
+- Decided by: agent at 2026-09-01T10:30:43.699097+00:00
+
+Rationale: Fix falls outside standing preauthorization; a human must rule at the gate.
+
+Cites: policy `1.0.0` · oracle `app/tests/vulns/ave_seed_bola_order_read.py` · ground truth `catalog.ground_truth()#I-04`
+
+</details>
+
+<details>
+<summary><b>Patch</b></summary>
+
+> Not an applicable diff. This patch is the in-process model of the fix (`_skeleton_target.py`), which is why its headers name a different file than the finding above.
+
 ```diff
 --- a/_skeleton_target.py:get_order
 +++ b/_skeleton_target.py:get_order
@@ -28,10 +101,7 @@ _Authorized by:_ helper-only diff within blast-radius limits; verification ladde
 +    return order
 ```
 
-## Verification ladder
-- [ ] T0 build
-- [x] T1 exploit oracle flipped
-- [ ] T2 full suite
-- [ ] re-attack clean
+</details>
 
-**Ready to merge: no**
+---
+*Generated by AVE from run `7ad4021795d94b5e9acb4367d0fd25b9`. No fix is claimed, ever — the ladder and the record above are what “fixed” means.*

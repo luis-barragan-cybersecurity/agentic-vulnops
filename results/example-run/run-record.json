@@ -1,67 +1,80 @@
 {
-  "run_id": "e382086f39354f8cb8ccafe55148af24",
-  "target_ref": "skeleton://python_authz/bola-order-owner",
-  "policy_version": "0",
+  "run_id": "7ad4021795d94b5e9acb4367d0fd25b9",
+  "target_ref": "target/dvrestaurant@d32d0997",
+  "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-08-29T18:58:00.213542+00:00",
-      "ended_at": "2026-08-29T18:58:00.214272+00:00",
+      "started_at": "2026-09-01T10:30:43.695552+00:00",
+      "ended_at": "2026-09-01T10:30:43.696576+00:00",
       "attributes": {
-        "target_ref": "skeleton://python_authz/bola-order-owner",
+        "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
       }
     },
     {
       "phase": "match",
-      "started_at": "2026-08-29T18:58:00.214829+00:00",
-      "ended_at": "2026-08-29T18:58:00.214837+00:00",
+      "started_at": "2026-09-01T10:30:43.697154+00:00",
+      "ended_at": "2026-09-01T10:30:43.697464+00:00",
       "attributes": {
         "found": 1
       }
     },
     {
       "phase": "assess",
-      "started_at": "2026-08-29T18:58:00.216073+00:00",
-      "ended_at": "2026-08-29T18:58:00.216081+00:00",
+      "started_at": "2026-09-01T10:30:43.698783+00:00",
+      "ended_at": "2026-09-01T10:30:43.698795+00:00",
       "attributes": {
         "selected": true
       }
     },
     {
       "phase": "decide",
-      "started_at": "2026-08-29T18:58:00.216330+00:00",
-      "ended_at": "2026-08-29T18:58:00.216337+00:00",
+      "started_at": "2026-09-01T10:30:43.699097+00:00",
+      "ended_at": "2026-09-01T10:30:43.701832+00:00",
       "attributes": {
-        "has_record": true
+        "route": "hitl_approved",
+        "hitl_route": "unknown_blast_radius",
+        "autonomous": false
       }
     },
     {
       "phase": "prepare",
-      "started_at": "2026-08-29T18:58:00.219549+00:00",
-      "ended_at": "2026-08-29T18:58:00.219728+00:00",
+      "started_at": "2026-09-01T10:30:43.706176+00:00",
+      "ended_at": "2026-09-01T10:30:43.706375+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-08-29T18:58:00.220560+00:00",
-      "ended_at": "2026-08-29T18:58:00.220564+00:00",
+      "started_at": "2026-09-01T10:30:43.707142+00:00",
+      "ended_at": "2026-09-01T10:30:43.707146+00:00",
       "attributes": {
-        "pr_ref": "local:pr/e382086f39354f8cb8ccafe55148af24"
+        "pr_ref": "local:pr/7ad4021795d94b5e9acb4367d0fd25b9"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-08-29T18:58:00.221298+00:00",
-      "ended_at": "2026-08-29T18:58:00.221314+00:00",
+      "started_at": "2026-09-01T10:30:43.707889+00:00",
+      "ended_at": "2026-09-01T10:30:43.707902+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
       }
     }
   ],
+  "findings": [
+    {
+      "finding_id": "I-04",
+      "first_observed_at": "2026-09-01T10:30:43.695552+00:00",
+      "triaged_at": "2026-09-01T10:30:43.699097+00:00",
+      "verified_at": null,
+      "outcome": "open",
+      "ladder_ever_green_then_red": false
+    }
+  ],
+  "exceptions": [],
   "ready_to_merge": false,
   "decision_record_present": true
 }

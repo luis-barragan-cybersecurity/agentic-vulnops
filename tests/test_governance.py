@@ -203,12 +203,12 @@ _INITIAL: AVEState = {
 }
 
 
-def test_graph_run_produces_a_two_part_decision_record() -> None:
+def test_graph_run_fails_closed_on_unmeasured_blast_radius() -> None:
     final = run_once(_INITIAL, auto_approve=True)
     record = final.get("decision_record")
     assert record is not None
-    # The Decide node called the pure decide(); the anchor is standing-preauthorized.
-    assert record["execution"]["route"] == "standing_preauthorized"
+    assert record["execution"]["route"] == "hitl_approved"
+    assert record["execution"]["hitl_route"] == "unknown_blast_radius"
     assert record["response"]["classification"] == "object-ownership-gap"
     assert record["citations"]["ground_truth"] == "catalog.ground_truth()#I-04"
     assert record["policy_version"] == "1.0.0"

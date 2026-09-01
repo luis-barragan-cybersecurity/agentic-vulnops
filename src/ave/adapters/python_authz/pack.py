@@ -52,34 +52,51 @@ class PythonAuthzPack:
         return finding.get("id") == catalog.anchor_id()
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
-        """Caller/PR-level reach of the fix. For the anchor this is the one endpoint and
-        its route; ticket 06 designs the reviewer-facing visual, this is its data. The
-        `files`/`dependents`/`routes` keys are the policy-facing dimensions the governance
-        predicate is measured against (ticket 05/08): the class-level guard touches two
-        helper files, one dependent call site, one route."""
+        """Return reviewer commands and an explicitly unmeasured policy radius."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
+        evidence = finding.get("evidence", {})
+        oracle = evidence.get("oracle", {}) if isinstance(evidence, dict) else {}
+        oracle_ref = f"{oracle.get('path')}::{oracle.get('test')}"
         return {
             "changed_symbol": "get_order",
             "callers": ["route:GET /orders/{order_id}"],
             "max_callers": 1,
             "rings": ["caller", "pr"],
-            "files": 2,
-            "dependents": 1,
-            "routes": 1,
+            "files": None,
+            "dependents": None,
+            "routes": None,
+            "cleared": [],
+            "before_you_merge": [
+                {
+                    "command": f"cd target/dvrestaurant && poetry run pytest {oracle_ref}",
+                    "expect": (
+                        "FAILS after this fix (inverted polarity — this test IS the "
+                        "attack); needs the target's pinned Poetry/Docker env"
+                    ),
+                },
+                {
+                    "command": "cd target/dvrestaurant && poetry run pytest app/tests",
+                    "expect": (
+                        "green — the target's own suite (the T2 rung; the ladder above "
+                        "is honest about not having run it)"
+                    ),
+                },
+            ],
         }
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
         """The proposed class-level remediation surface for the anchor: route object reads
         through a shared ownership guard rather than inlining an `if user.id == ...` check
-        at the one endpoint. These are the files a *real* fix would touch; they fall inside
-        the policy's helper-only allowlist, so `decide()` grants standing preauthorization
-        on the plan. `decide()` judges this proposal at Decide-time (before Prepare);
+        at the one endpoint. These are the files a *real* fix would touch. Because the
+        blast-radius dimensions are unmeasured, `decide()` routes the plan to
+        `hitl_approved` through `unknown_blast_radius`. `decide()` judges this proposal at
+        Decide-time (before Prepare);
         re-checking the *realized* patch against the same predicate is the before_execute
-        ring gate's job (deferred, ticket 09). In the walking skeleton `prepare_fix` models
-        the diff in-process, so its headers name `_skeleton_target.py`, not these files
-        (caveated on the PreparedFix); on a real target the realized patch touches exactly
-        these paths and that re-check agrees."""
+        ring gate's job (deferred to a follow-up ticket). In the walking skeleton
+        `prepare_fix` models the diff in-process, so its headers name
+        `_skeleton_target.py`, not these files (caveated on the PreparedFix); on a real
+        target the realized patch touches exactly these paths and that re-check agrees."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         return {
