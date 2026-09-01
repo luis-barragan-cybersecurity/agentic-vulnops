@@ -5,11 +5,11 @@
 
 ## The attack, and the deny that replaced it
 
-> **Exchange not captured by this run.** The exploit oracle ran through the pack's harness, which proves the flip but does not record a request/response transcript. When Execute/Verify run the bound by-path oracle in the target's own environment, the captured request and the actual deny render here verbatim — a 404 stays a 404.
+> **Exchange not captured by this run.** The exploit oracle ran through the pack's harness, which records an oracle result but no HTTP request or response. The ladder below shows what this run proved; no transcript is inferred from that result.
 
 - Endpoint under attack: `GET /orders/{order_id}`
 - Bound exploit oracle (inverted polarity): `app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read` — it *passes* by succeeding at the attack, so a fix must flip it red.
-- What this run proved: see **T1** in the ladder below — the flip is the evidence, and nothing beyond it is claimed.
+- What this run proved appears in the verification ladder below.
 
 ## Verification ladder
 
@@ -28,15 +28,13 @@ An unrun rung is never painted green — “⬜ not green” means the rung did 
 
 | Dimension | Measured | Limit (policy `1.0.0`) |
 |---|---|---|
-| Files changed | 2 | 3 |
-| Dependent call sites | 1 | 25 |
-| Routes affected | 1 | 15 |
+| Files changed | unmeasured | 3 |
+| Dependent call sites | unmeasured | 25 |
+| Routes affected | unmeasured | 15 |
 
 ### The one fact
 
-The fix is two files, not a one-line `if` inside `get_order`: the ownership predicate lands in the shared authorization dependency and its wiring, so the object-by-id read inherits the deny instead of re-implementing it — an inline check would fix this one endpoint and leave the class alive.
-
-*How sure: **2/5** — the in-process oracle model flips (T1) and the legitimate-owner read still passes; the two-file surface is the fix plan's `changed_paths`, not yet a measured diff against the pinned target — hence 2/5.*
+**Unproven.** This run emitted no measured blast-radius fact, so no claim is made in its place.
 
 ### Still open
 
@@ -59,10 +57,10 @@ cd target/dvrestaurant && poetry run pytest app/tests/vulns/ave_seed_bola_order_
 cd target/dvrestaurant && poetry run pytest app/tests
 ```
 
-**Rings:** this change is planned for `caller` → `pr`; each advance is gated by the policy's stop criteria, and the last named ring is the last one executed.
+**Rings:** planned for `caller` → `pr`. This run does not execute deployment rings or enforce their stop criteria.
 
 <details>
-<summary><b>Decision record</b> (two-part: response × execution) — CI re-derives this from <code>policy.yaml</code></summary>
+<summary><b>Decision record</b> (two-part: response × execution)</summary>
 
 **Part 1 — Response decision**
 - Classification: object-ownership-gap
@@ -71,13 +69,13 @@ cd target/dvrestaurant && poetry run pytest app/tests
 - Scope (the class removed): the whole object-ownership-gap class, not just app/apis/orders/services/get_order_service.py:get_order
 
 **Part 2 — Execution route**
-- Route: **standing_preauthorized** · HITL route fired: none
-- Rule matched: `helper_only_diff + class_level + within_blast_radius`
-- Blast radius (measured): files 2 / dependents 1 / routes 1
+- Route: **hitl_approved** · HITL route fired: **unknown_blast_radius**
+- Rule matched: `blast_radius.require_all_dimensions_measured`
+- Blast radius: files unmeasured / dependents unmeasured / routes unmeasured
 - Ladder required: `t0_build`, `t1_exploit_oracle_flipped`, `t2_full_suite`, `reattack_clean`
-- Decided by: agent at 2026-08-30T21:56:12.651738+00:00
+- Decided by: agent at 2026-09-01T01:40:34.589962+00:00
 
-Rationale: Helper-only, class-level diff within blast-radius limits => the fix removes the class and cannot regress a legitimate caller.
+Rationale: Fix falls outside standing preauthorization; a human must rule at the gate.
 
 Cites: policy `1.0.0` · oracle `app/tests/vulns/ave_seed_bola_order_read.py` · ground truth `catalog.ground_truth()#I-04`
 

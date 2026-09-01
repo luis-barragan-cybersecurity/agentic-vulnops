@@ -52,14 +52,7 @@ class PythonAuthzPack:
         return finding.get("id") == catalog.anchor_id()
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
-        """Caller/PR-level reach of the fix. The `files`/`dependents`/`routes` keys are
-        the policy-facing dimensions the governance predicate is measured against
-        (ticket 05/08). Ticket 06's contract makes this pass also the emitter of the PR
-        body's four blast-radius blocks, so the keys `fact` / `cleared` /
-        `before_you_merge` ride here too — filled only with what this pack can honestly
-        stand behind today: a fact graded 2/5 (proven on the in-process model, not the
-        pinned target), no cleared claims, and the reviewer-runnable oracle commands.
-        The renderer (`ave.pr`) renders honest empties for anything absent."""
+        """Return reviewer commands and an explicitly unmeasured policy radius."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         evidence = finding.get("evidence", {})
@@ -70,25 +63,9 @@ class PythonAuthzPack:
             "callers": ["route:GET /orders/{order_id}"],
             "max_callers": 1,
             "rings": ["caller", "pr"],
-            "files": 2,
-            "dependents": 1,
-            "routes": 1,
-            "fact": {
-                "statement": (
-                    "The fix is two files, not a one-line `if` inside `get_order`: the "
-                    "ownership predicate lands in the shared authorization dependency "
-                    "and its wiring, so the object-by-id read inherits the deny instead "
-                    "of re-implementing it — an inline check would fix this one endpoint "
-                    "and leave the class alive."
-                ),
-                "how_sure": 2,
-                "proof": (
-                    "the in-process oracle model flips (T1) and the legitimate-owner "
-                    "read still passes; the two-file surface is the fix plan's "
-                    "`changed_paths`, not yet a measured diff against the pinned "
-                    "target — hence 2/5."
-                ),
-            },
+            "files": None,
+            "dependents": None,
+            "routes": None,
             "cleared": [],
             "before_you_merge": [
                 {

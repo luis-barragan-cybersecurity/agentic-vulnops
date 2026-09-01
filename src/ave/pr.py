@@ -39,9 +39,8 @@ _LADDER_ROWS: list[tuple[str, str]] = [
 
 _NOT_CAPTURED = (
     "> **Exchange not captured by this run.** The exploit oracle ran through the pack's "
-    "harness, which proves the flip but does not record a request/response transcript. "
-    "When Execute/Verify run the bound by-path oracle in the target's own environment, "
-    "the captured request and the actual deny render here verbatim — a 404 stays a 404."
+    "harness, which records an oracle result but no HTTP request or response. The ladder "
+    "below shows what this run proved; no transcript is inferred from that result."
 )
 
 
@@ -60,43 +59,22 @@ def _endpoint(finding: dict[str, Any]) -> str:
     return str(endpoint) if endpoint else ""
 
 
-def _attack_exchange(finding: dict[str, Any], change: dict[str, Any]) -> list[str]:
-    """Section 1 — the captured request and the actual deny. Honest empty until the
-    harness that captures a real transcript exists; never a fabricated one."""
+def _attack_exchange(finding: dict[str, Any]) -> list[str]:
     lines = ["## The attack, and the deny that replaced it", ""]
-    exchange = change.get("attack_exchange")
-    if isinstance(exchange, dict) and exchange.get("request"):
-        lines.append("Captured while the target was vulnerable:")
-        lines.append("")
-        lines.append("```http")
-        lines.append(str(exchange["request"]).rstrip("\n"))
-        lines.append("")
-        lines.append(str(exchange.get("before_response", "")).rstrip("\n"))
-        lines.append("```")
-        lines.append("")
-        lines.append("The same request after this fix — the actual deny, unprettied:")
-        lines.append("")
-        lines.append("```http")
-        lines.append(str(exchange.get("after_response", "")).rstrip("\n"))
-        lines.append("```")
-    else:
-        lines.append(_NOT_CAPTURED)
-        lines.append("")
-        facts: list[str] = []
-        endpoint = _endpoint(finding)
-        if endpoint:
-            facts.append(f"- Endpoint under attack: `{endpoint}`")
-        oracle = _oracle_ref(finding)
-        if oracle:
-            facts.append(
-                f"- Bound exploit oracle (inverted polarity): `{oracle}` — it *passes* "
-                "by succeeding at the attack, so a fix must flip it red."
-            )
+    lines.append(_NOT_CAPTURED)
+    lines.append("")
+    facts: list[str] = []
+    endpoint = _endpoint(finding)
+    if endpoint:
+        facts.append(f"- Endpoint under attack: `{endpoint}`")
+    oracle = _oracle_ref(finding)
+    if oracle:
         facts.append(
-            "- What this run proved: see **T1** in the ladder below — the flip is the "
-            "evidence, and nothing beyond it is claimed."
+            f"- Bound exploit oracle (inverted polarity): `{oracle}` — it *passes* "
+            "by succeeding at the attack, so a fix must flip it red."
         )
-        lines.extend(facts)
+    facts.append("- What this run proved appears in the verification ladder below.")
+    lines.extend(facts)
     lines.append("")
     return lines
 
@@ -125,25 +103,38 @@ def _ladder(finding: dict[str, Any], ladder: dict[str, Any], ready: bool) -> lis
     return lines
 
 
+def _measurement(value: Any) -> str:
+    return "unmeasured" if value is None else str(value)
+
+
 def _counts_table(blast: dict[str, Any], policy_version: str) -> list[str]:
-    limits = load_policy().get("blast_radius", {})
+    policy = load_policy()
+    current_version = str(policy.get("version", "unset"))
+    limits = policy.get("blast_radius", {}) if current_version == policy_version else {}
     if not isinstance(limits, dict):
         limits = {}
-
-    def cell(value: Any) -> str:
-        return "unmeasured" if value is None else str(value)
 
     def limit(key: str) -> str:
         return str(limits[key]) if key in limits else "—"
 
-    return [
+    lines = [
         f"| Dimension | Measured | Limit (policy `{policy_version}`) |",
         "|---|---|---|",
-        f"| Files changed | {cell(blast.get('files'))} | {limit('max_files')} |",
-        f"| Dependent call sites | {cell(blast.get('dependents'))} "
+        f"| Files changed | {_measurement(blast.get('files'))} | {limit('max_files')} |",
+        f"| Dependent call sites | {_measurement(blast.get('dependents'))} "
         f"| {limit('max_dependents')} |",
-        f"| Routes affected | {cell(blast.get('routes'))} | {limit('max_routes')} |",
+        f"| Routes affected | {_measurement(blast.get('routes'))} "
+        f"| {limit('max_routes')} |",
     ]
+    if current_version != policy_version:
+        lines.extend(
+            [
+                "",
+                f"> Limits unavailable: run cites policy `{policy_version}`; current "
+                f"checkout has `{current_version}`.",
+            ]
+        )
+    return lines
 
 
 def _one_fact(blast: dict[str, Any]) -> list[str]:
@@ -157,8 +148,8 @@ def _one_fact(blast: dict[str, Any]) -> list[str]:
         lines.append(f"*How sure: **{sure}** — {fact.get('proof', 'no proof step given')}*")
     else:
         lines.append(
-            "**Unproven.** The blast-radius pass that emits this fact with a proof step "
-            "does not exist yet; no claim is made in its place."
+            "**Unproven.** This run emitted no measured blast-radius fact, so no claim "
+            "is made in its place."
         )
     lines.append("")
     return lines
@@ -257,14 +248,13 @@ def _decision_details(decision: dict[str, Any]) -> list[str]:
 
     lines: list[str] = []
     lines.append(
-        f"**Rings:** this change is planned for {rings}; each advance is gated by the "
-        "policy's stop criteria, and the last named ring is the last one executed."
+        f"**Rings:** planned for {rings}. This run does not execute deployment rings or "
+        "enforce their stop criteria."
     )
     lines.append("")
     lines.append("<details>")
     lines.append(
-        "<summary><b>Decision record</b> (two-part: response × execution) — CI "  # noqa: RUF001
-        "re-derives this from <code>policy.yaml</code></summary>"
+        "<summary><b>Decision record</b> (two-part: response × execution)</summary>"  # noqa: RUF001
     )
     lines.append("")
     lines.append("**Part 1 — Response decision**")
@@ -286,8 +276,9 @@ def _decision_details(decision: dict[str, Any]) -> list[str]:
     lines.append(f"- Rule matched: `{decision.get('rule_matched', '—')}`")
     radius = execution.get("blast_radius", {})
     lines.append(
-        f"- Blast radius (measured): files {radius.get('files')} / dependents "
-        f"{radius.get('dependents')} / routes {radius.get('routes')}"
+        f"- Blast radius: files {_measurement(radius.get('files'))} / dependents "
+        f"{_measurement(radius.get('dependents'))} / routes "
+        f"{_measurement(radius.get('routes'))}"
     )
     ladder_required = execution.get("verification_ladder_required") or []
     lines.append(
@@ -352,7 +343,7 @@ def render_pr_body(state: AVEState) -> str:
         f"· policy `{policy_version}`"
     )
     lines.append("")
-    lines.extend(_attack_exchange(finding, change))
+    lines.extend(_attack_exchange(finding))
     lines.extend(_ladder(finding, ladder, ready))
     lines.extend(_blast_radius_blocks(finding, findings, blast, policy_version))
     lines.extend(_decision_details(decision))

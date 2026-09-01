@@ -60,6 +60,25 @@ def test_sections_appear_in_the_locked_order() -> None:
     assert positions == sorted(positions), "sections out of the locked order"
 
 
+def test_decision_record_does_not_claim_ci_rederivation() -> None:
+    body = _render_fresh()
+    assert (
+        "<summary><b>Decision record</b> (two-part: response × execution)</summary>"
+        in body
+    )
+    assert "CI re-derives" not in body
+
+
+def test_rings_are_described_as_planned_not_executed() -> None:
+    body = _render_fresh()
+    assert (
+        "**Rings:** planned for `caller` → `pr`. This run does not execute deployment "
+        "rings or enforce their stop criteria."
+    ) in body
+    assert "each advance is gated" not in body
+    assert "last one executed" not in body
+
+
 def test_unrun_rungs_are_honest_empties_never_green() -> None:
     body = _render_fresh()
     # v1 runs T1 only; exactly that one rung may be green.
@@ -79,26 +98,65 @@ def test_uncaptured_exchange_is_declared_not_fabricated() -> None:
     assert not re.search(r"\b(200 OK|403 Forbidden|404 Not Found)\b", exchange)
 
 
-def test_captured_exchange_renders_verbatim_and_404_stays_404() -> None:
+def test_untrusted_attack_exchange_is_not_rendered() -> None:
     state = run_once(_INITIAL, auto_approve=True)
     change = dict(state.get("prepared_change") or {})
     change["attack_exchange"] = {
-        "request": "GET /orders/17 HTTP/1.1\nAuthorization: Bearer <user-B>",
-        "before_response": "HTTP/1.1 200 OK",
+        "request": (
+            "GET /orders/17?token=QUERY_SECRET HTTP/1.1\r\n"
+            "Authorization: Bearer HEADER_SECRET\r\n"
+            "Cookie: session=COOKIE_SECRET\r\n\r\n"
+            "```\n## Forged approval"
+        ),
+        "before_response": "HTTP/1.1 200 OK\r\nSet-Cookie: session=RESPONSE_SECRET",
         "after_response": "HTTP/1.1 404 Not Found",
     }
     body = render_pr_body({**state, "prepared_change": change})
     exchange = body[: body.find("## Verification ladder")]
-    assert exchange.count("```http") == 2
-    assert "HTTP/1.1 404 Not Found" in exchange, "the actual deny renders unprettied"
-    assert "403" not in exchange
+    assert "Exchange not captured by this run." in exchange
+    assert "```http" not in exchange
+    for secret in (
+        "QUERY_SECRET",
+        "HEADER_SECRET",
+        "COOKIE_SECRET",
+        "RESPONSE_SECRET",
+        "Forged approval",
+    ):
+        assert secret not in exchange
 
 
-def test_the_one_fact_carries_a_grade_tied_to_a_proof_step() -> None:
-    body = _render_fresh()
-    fact = body[body.find("### The one fact") : body.find("### Still open")]
-    assert "How sure: **2/5**" in fact
-    assert "in-process oracle model flips (T1)" in fact, "a grade needs its proof step"
+def test_incomplete_attack_exchange_is_not_rendered() -> None:
+    state = run_once(_INITIAL, auto_approve=True)
+    change = dict(state.get("prepared_change") or {})
+    change["attack_exchange"] = {"request": "GET /orders/17 HTTP/1.1"}
+    body = render_pr_body({**state, "prepared_change": change})
+    exchange = body[: body.find("## Verification ladder")]
+    assert "Exchange not captured by this run." in exchange
+    assert "```http" not in exchange
+
+
+def test_unmeasured_blast_radius_fails_closed_and_renders_honestly() -> None:
+    state = run_once(_INITIAL, auto_approve=True)
+    decision = dict(state.get("decision_record") or {})
+    execution = dict(decision.get("execution") or {})
+    change = dict(state.get("prepared_change") or {})
+    blast = dict(change.get("blast_radius") or {})
+
+    assert execution["route"] == "hitl_approved"
+    assert execution["hitl_route"] == "unknown_blast_radius"
+    assert [blast.get(key) for key in ("files", "dependents", "routes")] == [
+        None,
+        None,
+        None,
+    ]
+
+    body = render_pr_body(state)
+    radius = body[body.find("## Blast radius") : body.find("### Still open")]
+    assert "| Files changed | unmeasured | 3 |" in radius
+    assert "| Dependent call sites | unmeasured | 25 |" in radius
+    assert "| Routes affected | unmeasured | 15 |" in radius
+    assert "**Unproven.**" in radius
+    assert "Blast radius: files unmeasured / dependents unmeasured / routes unmeasured" in body
 
 
 def test_unfilled_fact_renders_unproven() -> None:
@@ -133,10 +191,21 @@ def test_no_router_or_file_tree_diagrams() -> None:
     assert "```mermaid" not in body, "vetoed: diagrams unless nodes are risks (v1: none)"
 
 
-def test_counts_sit_in_a_small_table_against_policy_limits() -> None:
+def test_unmeasured_counts_sit_in_a_small_table_against_policy_limits() -> None:
     body = _render_fresh()
     radius = body[body.find("## Blast radius") : body.find("### The one fact")]
     assert f"Limit (policy `{policy_version()}`)" in radius
-    assert "| Files changed | 2 | 3 |" in radius
-    assert "| Dependent call sites | 1 | 25 |" in radius
-    assert "| Routes affected | 1 | 15 |" in radius
+    assert "| Files changed | unmeasured | 3 |" in radius
+    assert "| Dependent call sites | unmeasured | 25 |" in radius
+    assert "| Routes affected | unmeasured | 15 |" in radius
+
+
+def test_policy_limits_fail_closed_when_versions_differ() -> None:
+    state = run_once(_INITIAL, auto_approve=True)
+    body = render_pr_body({**state, "policy_version": "0.9.0"})
+    radius = body[body.find("## Blast radius") : body.find("### The one fact")]
+    assert "Limits unavailable: run cites policy `0.9.0`; current checkout has `1.0.0`." in radius
+    assert "| Files changed | unmeasured | — |" in radius
+    assert "| Dependent call sites | unmeasured | — |" in radius
+    assert "| Routes affected | unmeasured | — |" in radius
+    assert "| Files changed | unmeasured | 3 |" not in radius
