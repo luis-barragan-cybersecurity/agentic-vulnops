@@ -92,7 +92,8 @@ theowni, used under GPL-3.0. See [`ATTRIBUTION.md`](./ATTRIBUTION.md).
 AVE is a stable, language-neutral **core** with everything target-specific behind one
 **language-pack seam**. The colours are boundaries: blue is the core, amber is governance
 (policy, the HITL gate, the invariant), green is the seam and its packs, red is the target
-under review, purple is evaluation, grey is what a run leaves behind.
+under review, purple is evaluation, grey is what a run leaves behind. Solid edges are this
+checkout. Dashed edges exist in code or on the roadmap and are not wired yet.
 
 ```mermaid
 flowchart LR
@@ -108,11 +109,11 @@ flowchart LR
     direction TB
     subgraph LOOP["Seven-phase LangGraph state machine · ave.graph + ave.phases"]
       direction LR
-      IN["Intake"]:::core --> MA["Match"]:::core --> AS["Assess"]:::core --> DE["Decide"]:::core --> GATE{{"HITL gate<br/>interrupt() before Prepare"}}:::gov --> PP["Prepare"]:::core --> EX["Execute"]:::core --> VE["Verify"]:::core
+      IN["Intake"]:::core --> MA["Match"]:::core --> AS["Assess"]:::core --> DE["Decide"]:::core --> GATE{{"HITL gate<br/>interrupt() before Prepare<br/>ave run auto-approves"}}:::gov --> PP["Prepare"]:::core --> EX["Execute"]:::core --> VE["Verify"]:::core
     end
-    POL["Governance as data · policy.yaml<br/>ave.policy.decide() — a pure predicate machine<br/>Autonomous, or one of four named Escalation routes"]:::gov
+    POL["Governance as data · policy.yaml<br/>ave.policy.decide() — a pure predicate machine<br/>Autonomous, or one of three named Escalation routes"]:::gov
     REC["Run records · ave.records<br/>RunRecord with findings and exceptions · two-part DecisionRecord"]:::core
-    INV["Invariant · ave.invariant<br/>no ready-to-merge without a green ladder and a decision record citing the policy version"]:::gov
+    INV["Invariant · ave.invariant<br/>ready_to_merge only with a green ladder and a decision record citing the policy version"]:::gov
     PRB["PR body generator · ave.pr<br/>attack exchange · ladder · four blast-radius blocks · rings"]:::core
     MET["Metrics · ave.metrics<br/>six SANS VulnOps metrics, computed only from run records"]:::core
   end
@@ -136,8 +137,8 @@ flowchart LR
   subgraph EVAL["Evaluation · evals/"]
     direction TB
     SEM["Semgrep baseline<br/>missing-role-checker.yaml + score.py"]:::evalc
-    PF["promptfoo suites<br/>evals/provider.py drives the real graph"]:::evalc
-    SB["make scoreboard<br/>regenerates the results table above"]:::evalc
+    PF["promptfoo suites<br/>evals/provider.py · scaffold"]:::evalc
+    SB["make scoreboard<br/>ticket 05 stub · does not write README.md"]:::evalc
   end
 
   subgraph OUT["Outputs · results/"]
@@ -147,23 +148,22 @@ flowchart LR
   end
 
   MA -- "find()" --> PROTO
-  AS -- "blast_radius()" --> PROTO
-  DE -- "fix_plan()" --> PROTO
+  AS -- "blast_radius() · fix_plan()" --> PROTO
   PP -- "prepare_fix()" --> PROTO
-  VE -- "run_exploit(), T1 and re-attack" --> PROTO
+  VE -- "run_exploit() · T1 only" --> PROTO
   DE -- "decide()" --> POL
   LOOP -- "every phase appends" --> REC
-  VE --> INV
-  EX --> PRB
+  VE -. "CI --check does not load results/runs/" .-> INV
+  EX -- "stamps local:pr/run_id" --> PRB
   PRB --> BUNDLE
   REC --> RUNS
   REC --> MET
-  MET --> SB
-  PY --> APP
-  PY --> ORA
+  MET -. "ticket 05, not wired" .-> SB
+  PY -. "not driven this checkout" .-> APP
+  PY -. "not driven this checkout" .-> ORA
   SEM -- "scored against" --> CAT
-  SEM --> SB
-  PF --> LOOP
+  SEM -. "does not write README" .-> SB
+  PF -. "scaffold" .-> LOOP
 ```
 
 The **negative obligation** behind the green boundary: nothing in the core is named
@@ -181,29 +181,32 @@ flowchart TB
   classDef rung fill:#f4f4f5,stroke:#52525b,color:#18181b
 
   IN["1 · Intake<br/>pin the target ref and the policy version · open the run record"]:::phase
-  MA["2 · Match<br/>pack.find() emits neutral Finding records"]:::phase
-  AS["3 · Assess<br/>retrieve-then-reason · pack.blast_radius() · select one finding to drive"]:::phase
+  MA["2 · Match<br/>pack.find() emits the catalog anchor as a Finding"]:::phase
+  AS["3 · Assess<br/>pack.blast_radius() · pack.fix_plan() · select findings[0]"]:::phase
   DE["4 · Decide<br/>decide(finding, fix_plan, blast_radius, policy) · two-part decision record"]:::phase
-  AUTO["Autonomous<br/>inside the fix predicates and blast-radius limits: pre-authorized by policy"]:::ok
-  ESC["Escalation — a named route<br/>out_of_policy_change · blast_radius_exceeded · unknown_blast_radius · failed_stop_criterion"]:::stop
-  GATE{{"HITL gate · interrupt()<br/>a human reviews the decision record before anything is built"}}:::gate
-  PP["5 · Prepare<br/>pack.prepare_fix() builds the class-level patch · draft PR"]:::phase
-  EX["6 · Execute<br/>apply the change · render the PR body"]:::phase
-  VE["7 · Verify · the ladder"]:::phase
-  T0["T0 · build"]:::rung
-  T1["T1 · the exploit oracle flips<br/>passing before the fix, failing after"]:::rung
-  T2["T2 · full suite · legitimate use still holds"]:::rung
-  RA["re-attack · the original exploit against the patched code"]:::rung
-  RTM["ready_to_merge<br/>the invariant: a green ladder and a decision record citing the policy version"]:::ok
-  DRAFT["stays a draft PR<br/>unrun rungs are shown as honest empties, never painted green"]:::stop
+  AUTO["Autonomous<br/>policy can return this · unused on the seeded instance"]:::ok
+  ESC["Escalation — a named decide() route<br/>out_of_policy_change · blast_radius_exceeded · unknown_blast_radius"]:::stop
+  GATE{{"HITL gate · interrupt() before Prepare<br/>ave run auto-approves · a paused run has no PR"}}:::gate
+  PP["5 · Prepare<br/>pack.prepare_fix() builds PreparedFix in-process · pr_ref stays unset"]:::phase
+  EX["6 · Execute<br/>stamps local:pr/run_id · does not apply a change"]:::phase
+  VE["7 · Verify · T1 only on this checkout"]:::phase
+  T0["T0 · build · unrun"]:::rung
+  T1["T1 · the exploit oracle flips"]:::rung
+  T2["T2 · full suite · legitimate_use_holds() · unrun"]:::rung
+  RA["re-attack · unrun"]:::rung
+  RTM["ready_to_merge<br/>green ladder and a decision record citing the policy version"]:::ok
+  DRAFT["local bundle · ready_to_merge stays no<br/>unrun rungs are honest empties, never painted green"]:::stop
 
   IN --> MA --> AS --> DE
   DE --> AUTO --> GATE
   DE --> ESC --> GATE
   GATE --> PP --> EX --> VE
-  VE --> T0 --> T1 --> T2 --> RA
-  RA -- "all green" --> RTM
+  VE --> T1
+  VE -. "unrun" .-> T0
+  VE -. "unrun" .-> T2
+  VE -. "unrun" .-> RA
   T0 & T1 & T2 & RA -. "any rung red or unrun" .-> DRAFT
+  RA -. "all green, not this checkout" .-> RTM
 ```
 
 **Roadmap (D3):** harden the seam against a second pack, then a second vertical — a
@@ -219,7 +222,7 @@ make setup       # install AVE + dev tooling
 make check       # lint + strict typecheck + tests
 make run         # walk seven phases on one seeded instance, write artifacts
 make eradicate   # break then auto-approved run (HITL does not pause)
-make scoreboard  # regenerate the results table from run records
+make scoreboard  # ticket 05 stub; does not edit README
 ```
 
 See [Architecture](#architecture) above for the diagrams, [`docs/architecture.md`](./docs/architecture.md)
