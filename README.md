@@ -87,6 +87,134 @@ theowni, used under GPL-3.0. See [`ATTRIBUTION.md`](./ATTRIBUTION.md).
 
 ---
 
+## Architecture
+
+AVE is a stable, language-neutral **core** with everything target-specific behind one
+**language-pack seam**. The colours are boundaries: blue is the core, amber is governance
+(policy, the HITL gate, the invariant), green is the seam and its packs, red is the target
+under review, purple is evaluation, grey is what a run leaves behind. Solid edges are this
+checkout. Dashed edges exist in code or on the roadmap and are not wired yet.
+
+```mermaid
+flowchart LR
+  classDef core fill:#e8f0fe,stroke:#1a56db,color:#0b1f4d
+  classDef gov fill:#fff4e5,stroke:#b7791f,color:#4a3000
+  classDef seam fill:#e6f7ee,stroke:#1f8a4c,color:#0b3d22
+  classDef future fill:#ffffff,stroke:#1f8a4c,stroke-dasharray:6 4,color:#0b3d22
+  classDef target fill:#fdecec,stroke:#c0392b,color:#4d0f0a
+  classDef evalc fill:#f3e8ff,stroke:#7c3aed,color:#2e1065
+  classDef out fill:#f4f4f5,stroke:#52525b,color:#18181b
+
+  subgraph CORE["Stable core · ave core packages · language- and vuln-family-neutral (D3)"]
+    direction TB
+    subgraph LOOP["Seven-phase LangGraph state machine · ave.graph + ave.phases"]
+      direction LR
+      IN["Intake"]:::core --> MA["Match"]:::core --> AS["Assess"]:::core --> DE["Decide"]:::core --> GATE{{"HITL gate<br/>interrupt() before Prepare<br/>ave run auto-approves"}}:::gov --> PP["Prepare"]:::core --> EX["Execute"]:::core --> VE["Verify"]:::core
+    end
+    POL["Governance as data · policy.yaml<br/>ave.policy.decide() — a pure predicate machine<br/>Autonomous, or one of three named Escalation routes"]:::gov
+    REC["Run records · ave.records<br/>RunRecord with findings and exceptions · two-part DecisionRecord"]:::core
+    INV["Invariant · ave.invariant<br/>ready_to_merge only with a green ladder and a decision record citing the policy version"]:::gov
+    PRB["PR body generator · ave.pr<br/>attack exchange · ladder · four blast-radius blocks · rings"]:::core
+    MET["Metrics · ave.metrics<br/>six SANS VulnOps metrics, computed only from run records"]:::core
+  end
+
+  subgraph SEAM["Language-pack seam · ave.adapters.LanguagePack"]
+    direction TB
+    PROTO["Protocol<br/>find · blast_radius · fix_plan · prepare_fix · run_exploit · legitimate_use_holds"]:::seam
+    PY["python_authz — the v1 pack<br/>Python / FastAPI · BOLA / BFLA"]:::seam
+    NEXT["second pack — roadmap<br/>e.g. Rails + Postgres, BOLA-first"]:::future
+    PROTO --- PY
+    PROTO -.- NEXT
+  end
+
+  subgraph TGT["Target under review · target/ · vendored, pinned fork"]
+    direction TB
+    APP["FastAPI application<br/>Damn Vulnerable RESTaurant at d32d0997"]:::target
+    ORA["By-path exploit oracles<br/>inverted polarity: a passing exploit means still vulnerable"]:::target
+    CAT["catalog.json — the answer key<br/>8 authorization instances + 5 decoys<br/>ground_truth() is never a finding source"]:::target
+  end
+
+  subgraph EVAL["Evaluation · evals/"]
+    direction TB
+    SEM["Semgrep baseline<br/>missing-role-checker.yaml + score.py"]:::evalc
+    PF["promptfoo suites<br/>evals/provider.py · scaffold"]:::evalc
+    SB["make scoreboard<br/>ticket 05 stub · does not write README.md"]:::evalc
+  end
+
+  subgraph OUT["Outputs · results/"]
+    direction TB
+    BUNDLE["PR bundle<br/>PR_BODY.md · decision record · ladder"]:::out
+    RUNS["results/runs/ per run id<br/>persisted run records"]:::out
+  end
+
+  MA -- "find()" --> PROTO
+  AS -- "blast_radius() · fix_plan()" --> PROTO
+  PP -- "prepare_fix()" --> PROTO
+  VE -- "run_exploit() · T1 only" --> PROTO
+  DE -- "decide()" --> POL
+  LOOP -- "every phase appends" --> REC
+  VE -. "CI --check does not load results/runs/" .-> INV
+  EX -- "stamps local:pr/run_id" --> PRB
+  PRB --> BUNDLE
+  REC --> RUNS
+  REC --> MET
+  MET -. "ticket 05, not wired" .-> SB
+  PY -. "not driven this checkout" .-> APP
+  PY -. "not driven this checkout" .-> ORA
+  SEM -- "scored against" --> CAT
+  SEM -. "does not write README" .-> SB
+  PF -. "scaffold" .-> LOOP
+```
+
+The **negative obligation** behind the green boundary: nothing in the core is named
+`python`, `fastapi`, or `authz`, so a second pack is an adapter-plus-config change, not a
+rewrite. The catalog's answer key is scored against, never read by a finder.
+
+### One run through the loop
+
+```mermaid
+flowchart TB
+  classDef phase fill:#e8f0fe,stroke:#1a56db,color:#0b1f4d
+  classDef gate fill:#fff4e5,stroke:#b7791f,color:#4a3000
+  classDef ok fill:#e6f7ee,stroke:#1f8a4c,color:#0b3d22
+  classDef stop fill:#fdecec,stroke:#c0392b,color:#4d0f0a
+  classDef rung fill:#f4f4f5,stroke:#52525b,color:#18181b
+
+  IN["1 · Intake<br/>pin the target ref and the policy version · open the run record"]:::phase
+  MA["2 · Match<br/>pack.find() emits the catalog anchor as a Finding"]:::phase
+  AS["3 · Assess<br/>pack.blast_radius() · pack.fix_plan() · select findings[0]"]:::phase
+  DE["4 · Decide<br/>decide(finding, fix_plan, blast_radius, policy) · two-part decision record"]:::phase
+  AUTO["Autonomous<br/>policy can return this · unused on the seeded instance"]:::ok
+  ESC["Escalation — a named decide() route<br/>out_of_policy_change · blast_radius_exceeded · unknown_blast_radius"]:::stop
+  GATE{{"HITL gate · interrupt() before Prepare<br/>ave run auto-approves · a paused run has no PR"}}:::gate
+  PP["5 · Prepare<br/>pack.prepare_fix() builds PreparedFix in-process · pr_ref stays unset"]:::phase
+  EX["6 · Execute<br/>stamps local:pr/run_id · does not apply a change"]:::phase
+  VE["7 · Verify · T1 only on this checkout"]:::phase
+  T0["T0 · build · unrun"]:::rung
+  T1["T1 · the exploit oracle flips"]:::rung
+  T2["T2 · full suite · legitimate_use_holds() · unrun"]:::rung
+  RA["re-attack · unrun"]:::rung
+  RTM["ready_to_merge<br/>green ladder and a decision record citing the policy version"]:::ok
+  DRAFT["local bundle · ready_to_merge stays no<br/>unrun rungs are honest empties, never painted green"]:::stop
+
+  IN --> MA --> AS --> DE
+  DE --> AUTO --> GATE
+  DE --> ESC --> GATE
+  GATE --> PP --> EX --> VE
+  VE --> T1
+  VE -. "unrun" .-> T0
+  VE -. "unrun" .-> T2
+  VE -. "unrun" .-> RA
+  T0 & T1 & T2 & RA -. "any rung red or unrun" .-> DRAFT
+  RA -. "all green, not this checkout" .-> RTM
+```
+
+**Roadmap (D3):** harden the seam against a second pack, then a second vertical — a
+Rails + Postgres target, BOLA-first, with a tenancy ownership model — through the unchanged
+core. See [`docs/architecture.md`](./docs/architecture.md) for the phase table.
+
+---
+
 ## Quick start
 
 ```bash
@@ -94,11 +222,11 @@ make setup       # install AVE + dev tooling
 make check       # lint + strict typecheck + tests
 make run         # walk seven phases on one seeded instance, write artifacts
 make eradicate   # break then auto-approved run (HITL does not pause)
-make scoreboard  # regenerate the results table from run records
+make scoreboard  # ticket 05 stub; does not edit README
 ```
 
-See [`docs/architecture.md`](./docs/architecture.md) for the seven-phase graph and
-[`Makefile`](./Makefile) for all verbs.
+See [Architecture](#architecture) above for the diagrams, [`docs/architecture.md`](./docs/architecture.md)
+for the phase table, and [`Makefile`](./Makefile) for all verbs.
 
 ## License
 

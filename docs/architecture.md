@@ -1,35 +1,61 @@
 # Architecture
 
-AVE is a LangGraph state machine of **seven phases**, with one human governance gate.
+AVE is a LangGraph state machine of **seven phases**, with one human governance gate. The
+README's [Architecture](../README.md#architecture) section carries the boundary map (core /
+governance / seam / target / evaluation / outputs) and the one-run view; this page is the
+phase table behind them. Solid edges on those diagrams are this checkout. Dashed edges
+exist in code or on the roadmap and are not wired yet.
 
-```
-Intake -> Match -> Assess -> Decide -> [ HITL gate ] -> Prepare -> Execute -> Verify
+```mermaid
+flowchart LR
+  classDef phase fill:#e8f0fe,stroke:#1a56db,color:#0b1f4d
+  classDef gate fill:#fff4e5,stroke:#b7791f,color:#4a3000
+  IN["Intake"]:::phase --> MA["Match"]:::phase --> AS["Assess"]:::phase --> DE["Decide"]:::phase --> G{{"HITL gate<br/>interrupt()<br/>ave run auto-approves"}}:::gate --> PP["Prepare"]:::phase --> EX["Execute"]:::phase --> VE["Verify"]:::phase
 ```
 
-| Phase | Responsibility |
-|-------|----------------|
-| **Intake** | Pin the target ref + policy version; open the run record. |
-| **Match** | Surface candidate findings (rule + model findings, fanned in behind the adapter seam). |
-| **Assess** | Retrieve-then-reason over findings (avoids caller-graph context overflow); select one to drive. |
-| **Decide** | Produce the two-part decision record citing the policy version. |
-| **HITL gate** | `interrupt()` before Prepare — a human approves the decision record. Structural, never a prompt. |
-| **Prepare** | Build the class-level change and a draft PR. |
-| **Execute** | Apply the change; open/update the PR with the blast-radius / ring view. |
-| **Verify** | Run the verification ladder (T0 build, T1 flipped exploit oracle, T2 full suite, re-attack); only then mark ready-to-merge. |
+| Phase | Responsibility | Seam call |
+|-------|----------------|-----------|
+| **Intake** | Pin the target ref + policy version; open the run record. | — |
+| **Match** | `find()` emits the catalog anchor (`I-04`) as a `Finding`. | `find()` |
+| **Assess** | Measure reach, propose a fix, select `findings[0]` to drive. | `blast_radius()`, `fix_plan()` |
+| **Decide** | Evaluate the proposed remediation against `policy.yaml` with the pure `decide()`; produce the two-part decision record citing the policy version. | — |
+| **HITL gate** | `interrupt()` before Prepare. Structural, never a prompt. `ave run` auto-approves. A paused run has no `pr_ref`. | — |
+| **Prepare** | `prepare_fix()` builds an in-process `PreparedFix`. `pr_ref` stays unset. | `prepare_fix()` |
+| **Execute** | Stamp `local:pr/<run_id>`. Does not apply a change to the vendored app. `persist_run` writes the bundle after the graph. | — |
+| **Verify** | T1 via `run_exploit()` only. T0, T2, and re-attack stay unrun. Does not call `legitimate_use_holds()`. `ready_to_merge` stays false. | `run_exploit()` |
 
 ## Stable core vs. the language-pack seam (D3)
 
-The **core** — `ave.graph`, `ave.state`, `ave.records`, `ave.policy`, `ave.telemetry` —
-is language- and vuln-family-neutral. Nothing in it is named `python`, `fastapi`, or
-`authz`. The v1 vertical (Python/FastAPI, BOLA/BFLA) plugs in behind
-[`ave.adapters`](../src/ave/adapters/README.md) — the language-pack seam, reserved but
-**not designed** until the walking skeleton reveals what is genuinely Python-specific.
+The **core** — `ave.graph`, `ave.phases`, `ave.state`, `ave.records`, `ave.policy`,
+`ave.invariant`, `ave.pr`, `ave.metrics`, `ave.telemetry` — is language- and
+vuln-family-neutral. Nothing in it is named `python`, `fastapi`, or `authz`. Everything
+target-specific plugs in behind [`ave.adapters`](../src/ave/adapters/README.md): the
+`LanguagePack` protocol (finding sources, blast-radius extraction, a proposed fix plan, fix
+templates, and an exploit-oracle harness with inverted polarity). v1's single pack is
+`python_authz` (Python/FastAPI, BOLA/BFLA) against the vendored, pinned target in
+[`target/`](../target/README.md). This checkout does not start that FastAPI app. Adding a
+language is an adapter-plus-config change against the unchanged core; the roadmap's second
+pack is a Rails + Postgres vertical, BOLA-first.
+
+## Governance and the invariant
+
+`policy.yaml` is governance as data. `ave.policy.decide()` is a pure predicate machine.
+It has no clock, PR, or oracle inside, so CI can re-derive every decision. It returns
+*Autonomous* or one of three named *Escalation* routes (`unknown_blast_radius`,
+`blast_radius_exceeded`, `out_of_policy_change`). `failed_stop_criterion` belongs to
+`ring_stop_criterion()`, which this checkout does not enforce. The invariant
+(`ave.invariant`): **`ready_to_merge` is true only with a green ladder and a decision
+record citing the policy version.** That conjunction is in-graph.
+`python -m ave.invariant --check` still prints
+`invariant: OK (no run records to validate yet)` and does not load `results/runs/`.
+`ave run` writes a local bundle under `results/runs/<id>/`, not a GitHub draft. See
+[`invariant.md`](./invariant.md).
 
 ## Compounding exports
 
-1. **Run-record schema** (`ave.records.run_record`) — OTel-shaped; every phase appends;
-   metrics, the invariant check, and monitoring read it.
-2. **`policy.yaml` shape** (`ave.policy`) — governance-as-data.
-3. **Language-pack seam** (`ave.adapters`) — named, not designed.
-
-See [`invariant.md`](./invariant.md) and [`run-record-schema.md`](./run-record-schema.md).
+1. **Run-record schema** (`ave.records.run_record`). OTel-shaped. Every phase appends. It
+   carries a per-finding lifecycle and an exceptions list. Metrics, the invariant check, and
+   monitoring are meant to read that one record. `ave.metrics.compute_metrics` exists.
+   `make scoreboard` does not call it. See [`run-record-schema.md`](./run-record-schema.md).
+2. **`policy.yaml` shape** (`ave.policy`). Governance-as-data.
+3. **Language-pack seam** (`ave.adapters`). The protocol a second language plugs into.
