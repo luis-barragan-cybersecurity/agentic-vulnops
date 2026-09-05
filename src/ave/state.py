@@ -41,6 +41,7 @@ class AVEState(TypedDict, total=False):
     # Intake
     target_ref: str  # pinned ref of the target under review
     policy_version: str  # the policy.yaml version this run obeys
+    use_pinned_env: bool  # opt in to running the by-path oracle in the target's pinned env
 
     # Match / Assess
     findings: list[Finding]
@@ -54,6 +55,10 @@ class AVEState(TypedDict, total=False):
     # Prepare / Execute
     prepared_change: dict[str, Any] | None
     pr_ref: str | None
+    # The pinned-env exploit result, when opted in and the env was available (else absent).
+    # Prepare captures it (threading the attack exchange into prepared_change); Verify reads
+    # its `flipped` signal for T1 instead of the hermetic oracle. Shape: PinnedExploitResult.
+    pinned_exploit: dict[str, Any] | None
 
     # Verify
     verification: VerificationLadder

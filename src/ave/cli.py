@@ -19,11 +19,19 @@ metrics/schema work (ticket 05).
 from __future__ import annotations
 
 import argparse
+import os
 
 from ave.policy.loader import policy_version
 from ave.runner import persist_run, run_once
 from ave.state import AVEState
 from ave.telemetry import setup_tracing
+
+
+def _pinned_env_opt_in() -> bool:
+    """Opt into the pinned-env exploit runner from the environment. Off by default, so a
+    machine without the target's pinned Poetry env behaves exactly as before (the hermetic
+    oracle drives the loop and the attack exchange stays 'not captured')."""
+    return os.environ.get("AVE_PINNED_ENV", "").strip().lower() in ("1", "true", "yes")
 
 
 def _run(_: argparse.Namespace) -> int:
@@ -32,6 +40,7 @@ def _run(_: argparse.Namespace) -> int:
         initial: AVEState = {
             "target_ref": "target/dvrestaurant@d32d0997",
             "policy_version": policy_version(),
+            "use_pinned_env": _pinned_env_opt_in(),
         }
         print("run: walking seven phases; HITL gate auto-approves (no pause).")
         final = run_once(initial, auto_approve=True)
