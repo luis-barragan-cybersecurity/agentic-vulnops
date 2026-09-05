@@ -75,13 +75,11 @@ def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
     assert "object-ownership-gap (BOLA)" not in body
     assert "ownership guard" not in body
     assert "```diff" in body
-    assert "Not an applicable diff" in body, (
-        "the body names the vendored file and ships the model's diff; it must say so"
-    )
+    assert "Not an applicable diff" not in body
     patch = artifacts["patch"].read_text()
     assert "current_user" in patch
-    assert "_skeleton_target.py" in patch, "headers must name the file the body came from"
-    assert "get_order_service.py" not in patch, "the body is not the vendored function"
+    assert "_skeleton_target.py" not in patch
+    assert "get_order_service.py" in patch
 
 
 def test_catalog_ground_truth_holds_every_seeded_instance() -> None:

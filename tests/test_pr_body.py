@@ -43,6 +43,24 @@ def test_golden_render_matches_the_committed_example_run() -> None:
     assert _normalize(_render_fresh()) == _normalize(_GOLDEN.read_text(encoding="utf-8"))
 
 
+def test_default_run_span_shape_matches_example_run_contract() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
+    for phase in ("prepare", "verify"):
+        live = next(span for span in final["spans"] if span["phase"] == phase)
+        golden = next(span for span in record["spans"] if span["phase"] == phase)
+        assert live["attributes"] == golden["attributes"]
+    assert "use_pinned_env" not in final
+    assert "pinned_exploit" not in final
+
+
+def test_default_run_discloses_hermetic_t1_provenance() -> None:
+    body = _render_fresh()
+    ladder = body[body.find("## Verification ladder") : body.find("## Blast radius")]
+    assert "hermetic in-process model flipped" in ladder
+    assert "generated patch was not executed by this run" in ladder
+
+
 def test_committed_example_artifacts_share_the_fail_closed_route() -> None:
     record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
     decide_span = next(span for span in record["spans"] if span["phase"] == "decide")
@@ -153,6 +171,34 @@ def test_incomplete_attack_exchange_is_not_rendered() -> None:
     exchange = body[: body.find("## Verification ladder")]
     assert "Exchange not captured by this run." in exchange
     assert "```http" not in exchange
+
+
+def test_valid_captured_exchange_renders_verbatim() -> None:
+    """A complete, secret-free exchange (what the pinned-env harness produces) renders as
+    the opener's fenced transcript instead of the 'not captured' fallback."""
+    state = run_once(_INITIAL, auto_approve=True)
+    change = dict(state.get("prepared_change") or {})
+    change["attack_exchange"] = {
+        "request": "GET /orders/500 HTTP/1.1\nHost: testserver\nAccept: */*",
+        "before_response": (
+            'HTTP/1.1 200 OK\ncontent-type: application/json\n\n'
+            '{"id":500,"user_id":99}'
+        ),
+        "after_response": (
+            'HTTP/1.1 404 Not Found\ncontent-type: application/json\n\n'
+            '{"detail":"Order not found"}'
+        ),
+    }
+    body = render_pr_body({**state, "prepared_change": change})
+    exchange = body[: body.find("## Verification ladder")]
+    assert "Exchange not captured by this run." not in exchange
+    assert exchange.count("```http") == 3
+    assert "GET /orders/500 HTTP/1.1" in exchange
+    assert "200 OK" in exchange and "404 Not Found" in exchange
+    # The locked section order still holds with a rendered transcript.
+    assert body.find("## The attack, and the deny that replaced it") < body.find(
+        "## Verification ladder"
+    ) < body.find("## Blast radius")
 
 
 def test_unmeasured_blast_radius_fails_closed_and_renders_honestly() -> None:

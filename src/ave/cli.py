@@ -19,6 +19,7 @@ metrics/schema work (ticket 05).
 from __future__ import annotations
 
 import argparse
+import os
 
 from ave.policy.loader import policy_version
 from ave.runner import persist_run, run_once
@@ -26,13 +27,24 @@ from ave.state import AVEState
 from ave.telemetry import setup_tracing
 
 
+def _pinned_env_opt_in() -> bool:
+    return os.environ.get("AVE_PINNED_ENV", "").strip().lower() in ("1", "true", "yes")
+
+
+def initial_run_state() -> AVEState:
+    initial: AVEState = {
+        "target_ref": "target/dvrestaurant@d32d0997",
+        "policy_version": policy_version(),
+    }
+    if _pinned_env_opt_in():
+        initial["use_pinned_env"] = True
+    return initial
+
+
 def _run(_: argparse.Namespace) -> int:
     tracer = setup_tracing()
     with tracer.start_as_current_span("ave.run"):
-        initial: AVEState = {
-            "target_ref": "target/dvrestaurant@d32d0997",
-            "policy_version": policy_version(),
-        }
+        initial = initial_run_state()
         print("run: walking seven phases; HITL gate auto-approves (no pause).")
         final = run_once(initial, auto_approve=True)
         artifacts = persist_run(final)

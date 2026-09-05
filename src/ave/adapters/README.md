@@ -18,6 +18,25 @@ in [`base.py`](base.py) as the `LanguagePack` protocol — and v1's single pack 
   in-process oracle (`python_authz/_skeleton_target.py`) so `make check` runs without the
   target's environment. A real finding source, and the other instances' by-path oracles in
   the target's pinned env, are the next deepening (find-stage / execution).
+- **Optional capability — the pinned-env runner** (`base.PinnedEnvCapable`): a pack *may*
+  also run an instance's by-path exploit oracle inside the target's own **pinned
+  environment** (for `python_authz`, `target/dvrestaurant/` under Poetry / Python 3.10),
+  running the same capture test against the original target and an isolated copy with the
+  generated patch applied. It carries the captured request and responses into
+  `prepared_change["attack_exchange"]` for the PR body's opener. The capability is opt-in
+  per run through `state["use_pinned_env"]`, wired from `AVE_PINNED_ENV`. Every requested
+  run returns a `PinnedExploitResult` whose `status` distinguishes successful flips,
+  non-flipping captures, unavailable environments, launch failures, patch failures, test
+  failures, malformed output, and unsafe captures. A requested failure leaves T1 red and
+  never falls back to the hermetic oracle. Runs without the opt-in still use the hermetic
+  oracle and omit pinned state. The captured transcript passes three independent
+  fail-closed gates before it reaches the public PR body.
+  - **Seam smell for ticket 14:** this makes the exploit-oracle harness carry **two runner
+    shapes** — the hermetic in-process `run_exploit`, and this pinned-subprocess runner — and
+    the seam does not yet name a Runner strategy; the core picks between them by a capability
+    probe. Unifying them behind one named Runner is seam-hardening work (ticket 14). Keeping
+    it an *optional* Protocol (not part of `LanguagePack`) is deliberate: a pack with no
+    pinned env is not forced to implement it.
 - **The negative obligation (D3):** the stable core (`ave.graph`, `ave.state`, `ave.records`,
   `ave.policy`) must never bake in `python` / `fastapi` / `authz` naming, so a second pack
   (roadmap) can be added without reshaping the core. `get_default_pack()` is the only

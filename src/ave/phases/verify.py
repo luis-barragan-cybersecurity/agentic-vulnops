@@ -13,9 +13,17 @@ No selected finding or prepared change => an all-false ladder.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ave.adapters import get_default_pack
 from ave.records.store import make_span, now_iso
-from ave.state import AVEState, VerificationLadder
+from ave.state import AVEState, PinnedExploitResult, VerificationLadder
+
+
+def _pinned_t1(pinned: PinnedExploitResult | None) -> bool:
+    if not pinned:
+        return False
+    return pinned.get("status") == "success" and bool(pinned.get("flipped"))
 
 
 def verify(state: AVEState) -> AVEState:
@@ -29,20 +37,29 @@ def verify(state: AVEState) -> AVEState:
         "t2_full_suite": False,
         "reattack_clean": False,
     }
+    attributes: dict[str, Any] = {}
 
     if selected is not None and change is not None:
-        pack = get_default_pack()
-        exploit_before = pack.run_exploit(selected, fixed=False)
-        exploit_after = pack.run_exploit(selected, fixed=True)
-        # T1 only. A nonempty patch is not a build; a legitimate-owner call is not
-        # a full suite; a second exploit call is not a re-attack.
-        ladder["t1_exploit_oracle_flipped"] = exploit_before and not exploit_after
+        if state.get("use_pinned_env"):
+            pinned = state.get("pinned_exploit")
+            ladder["t1_exploit_oracle_flipped"] = _pinned_t1(pinned)
+            attributes["t1_runner"] = "pinned"
+            if pinned is not None:
+                attributes["pinned_status"] = pinned["status"]
+                attributes["pinned_detail"] = pinned.get("detail")
+        else:
+            pack = get_default_pack()
+            exploit_before = pack.run_exploit(selected, fixed=False)
+            exploit_after = pack.run_exploit(selected, fixed=True)
+            ladder["t1_exploit_oracle_flipped"] = exploit_before and not exploit_after
 
     green = all(ladder.values())
     has_record = state.get("decision_record") is not None
     ready = green and has_record
+    attributes["ladder_green"] = green
+    attributes["ready"] = ready
     return {
         "verification": ladder,
         "ready_to_merge": ready,
-        "spans": [make_span("verify", started, {"ladder_green": green, "ready": ready})],
+        "spans": [make_span("verify", started, attributes)],
     }

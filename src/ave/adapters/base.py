@@ -19,6 +19,8 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from ave.state import Finding
+from ave.state import PinnedExploitResult as PinnedExploitResult
+from ave.state import PinnedStatus as PinnedStatus
 
 
 class PreparedFix(dict[str, Any]):
@@ -75,4 +77,20 @@ class LanguagePack(Protocol):
     def legitimate_use_holds(self, *, fixed: bool) -> bool:
         """The verification ladder's positive check: the fix must not break legitimate
         (correctly-authorized) use of the affected endpoint."""
+        ...
+
+
+@runtime_checkable
+class PinnedEnvCapable(Protocol):
+    """Optional pinned-environment runner for an already prepared fix.
+
+    Every requested run returns an explicit outcome. Unavailable or failed runs do not
+    fall back to the hermetic oracle."""
+
+    def run_pinned_exploit(
+        self, finding: Finding, prepared: dict[str, Any]
+    ) -> PinnedExploitResult:
+        """Apply `prepared["patch"]` in an isolated copy and run the finding's by-path
+        oracle against the original target and that copy. Never raises; every failure is an
+        explicit `PinnedStatus`."""
         ...

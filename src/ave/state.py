@@ -9,7 +9,7 @@ adapter seam.
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
 
@@ -34,6 +34,30 @@ class VerificationLadder(TypedDict, total=False):
     reattack_clean: bool
 
 
+PinnedStatus = Literal[
+    "success",
+    "not_flipped",
+    "unavailable",
+    "launch_failed",
+    "patch_failed",
+    "test_failed",
+    "malformed",
+    "unsafe_capture",
+]
+
+
+class PinnedExploitResult(TypedDict):
+    """One explicit outcome from a requested pinned-environment run."""
+
+    status: PinnedStatus
+    before_vulnerable: bool | None
+    after_blocked: bool | None
+    flipped: bool | None
+    attack_exchange: dict[str, Any] | None
+    detail: str
+    patch_applied: bool
+
+
 class AVEState(TypedDict, total=False):
     """State threaded through Intake -> Match -> Assess -> Decide -> Prepare ->
     Execute -> Verify."""
@@ -41,6 +65,7 @@ class AVEState(TypedDict, total=False):
     # Intake
     target_ref: str  # pinned ref of the target under review
     policy_version: str  # the policy.yaml version this run obeys
+    use_pinned_env: bool
 
     # Match / Assess
     findings: list[Finding]
@@ -54,6 +79,7 @@ class AVEState(TypedDict, total=False):
     # Prepare / Execute
     prepared_change: dict[str, Any] | None
     pr_ref: str | None
+    pinned_exploit: PinnedExploitResult
 
     # Verify
     verification: VerificationLadder

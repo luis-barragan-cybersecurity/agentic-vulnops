@@ -1,12 +1,12 @@
 {
-  "run_id": "7ad4021795d94b5e9acb4367d0fd25b9",
+  "run_id": "d7fe25ceb51644a9b85f510815d077c2",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-01T10:30:43.695552+00:00",
-      "ended_at": "2026-09-01T10:30:43.696576+00:00",
+      "started_at": "2026-09-05T01:32:20.348107+00:00",
+      "ended_at": "2026-09-05T01:32:20.349080+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,24 +14,24 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-01T10:30:43.697154+00:00",
-      "ended_at": "2026-09-01T10:30:43.697464+00:00",
+      "started_at": "2026-09-05T01:32:20.349630+00:00",
+      "ended_at": "2026-09-05T01:32:20.349861+00:00",
       "attributes": {
         "found": 1
       }
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-01T10:30:43.698783+00:00",
-      "ended_at": "2026-09-01T10:30:43.698795+00:00",
+      "started_at": "2026-09-05T01:32:20.351022+00:00",
+      "ended_at": "2026-09-05T01:32:20.351034+00:00",
       "attributes": {
         "selected": true
       }
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-01T10:30:43.699097+00:00",
-      "ended_at": "2026-09-01T10:30:43.701832+00:00",
+      "started_at": "2026-09-05T01:32:20.351426+00:00",
+      "ended_at": "2026-09-05T01:32:20.354436+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -40,24 +40,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-01T10:30:43.706176+00:00",
-      "ended_at": "2026-09-01T10:30:43.706375+00:00",
+      "started_at": "2026-09-05T01:32:20.356999+00:00",
+      "ended_at": "2026-09-05T01:32:20.357278+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-01T10:30:43.707142+00:00",
-      "ended_at": "2026-09-01T10:30:43.707146+00:00",
+      "started_at": "2026-09-05T01:32:20.357759+00:00",
+      "ended_at": "2026-09-05T01:32:20.357764+00:00",
       "attributes": {
-        "pr_ref": "local:pr/7ad4021795d94b5e9acb4367d0fd25b9"
+        "pr_ref": "local:pr/d7fe25ceb51644a9b85f510815d077c2"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-01T10:30:43.707889+00:00",
-      "ended_at": "2026-09-01T10:30:43.707902+00:00",
+      "started_at": "2026-09-05T01:32:20.358493+00:00",
+      "ended_at": "2026-09-05T01:32:20.358506+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -67,8 +67,8 @@
   "findings": [
     {
       "finding_id": "I-04",
-      "first_observed_at": "2026-09-01T10:30:43.695552+00:00",
-      "triaged_at": "2026-09-01T10:30:43.699097+00:00",
+      "first_observed_at": "2026-09-05T01:32:20.348107+00:00",
+      "triaged_at": "2026-09-05T01:32:20.351426+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
