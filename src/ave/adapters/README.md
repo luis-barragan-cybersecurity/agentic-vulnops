@@ -25,12 +25,12 @@ in [`base.py`](base.py) as the `LanguagePack` protocol — and v1's single pack 
   generated patch applied. It carries the captured request and responses into
   `prepared_change["attack_exchange"]` for the PR body's opener. The capability is opt-in
   per run through `state["use_pinned_env"]`, wired from `AVE_PINNED_ENV`. Every requested
-  run returns a `PinnedExploitResult` whose `status` distinguishes success, unavailable
-  environments, launch failures, patch failures, test failures, malformed output, and
-  unsafe captures. A requested failure leaves T1 red and never falls back to the hermetic
-  oracle. Runs without the opt-in still use the hermetic oracle and omit pinned state. The
-  captured transcript passes three independent fail-closed gates before it reaches the
-  public PR body.
+  run returns a `PinnedExploitResult` whose `status` distinguishes successful flips,
+  non-flipping captures, unavailable environments, launch failures, patch failures, test
+  failures, malformed output, and unsafe captures. A requested failure leaves T1 red and
+  never falls back to the hermetic oracle. Runs without the opt-in still use the hermetic
+  oracle and omit pinned state. The captured transcript passes three independent
+  fail-closed gates before it reaches the public PR body.
   - **Seam smell for ticket 14:** this makes the exploit-oracle harness carry **two runner
     shapes** — the hermetic in-process `run_exploit`, and this pinned-subprocess runner — and
     the seam does not yet name a Runner strategy; the core picks between them by a capability

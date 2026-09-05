@@ -69,7 +69,7 @@ Stable handles:
 - Pause pytest node `tests/test_graph_smoke.py::test_run_halts_at_the_hitl_gate_before_approval`
 - Resume pytest node `tests/test_walking_skeleton.py::test_loop_runs_end_to_end_and_produces_a_pr`
 - PR-body contract node `tests/test_pr_body.py` (19 tests; golden comparison normalizes only run IDs and timestamps)
-- Pinned-run contract node `tests/test_pinned_env.py` (51 tests)
+- Pinned-run contract node `tests/test_pinned_env.py` (53 tests)
 - Pinned opt-in environment variable `AVE_PINNED_ENV`
 - Baseline heading `AVE role-pattern Semgrep baseline — score vs target catalog`
 - Baseline class-aware BOLA line `BOLA  recall : 0%  (0/4)`

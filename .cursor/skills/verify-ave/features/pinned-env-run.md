@@ -31,7 +31,7 @@ Preconditions:
 - **Pinned success.** Open the printed `run_record`. The Prepare span has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true`. The Verify span has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE accepted the generated patch's `200` to `404` or `403` flip.
 - **Pinned PR body.** Open the printed `pr_body`. The opener has three `http` blocks for the request, the `200` response, and the I-04 harness's `404` response. It does not contain `Exchange not captured by this run.`
 - **Failure path.** If the target environment is unavailable, record that prerequisite and drive the command anyway. The Prepare span has `pinned_status: unavailable`. The Verify span keeps `t1_runner: pinned`, records the same status, and leaves T1 red. The PR body declares that pinned execution was requested but unavailable.
-- **Pinned unit contract.** Run `.cursor/skills/verify-ave/control-ave capture pinned-env-tests -- pytest -- tests/test_pinned_env.py -q`. Exit code `0`; stdout reports `51 passed`. These tests lock explicit outcomes, patch proof, redaction, and graph wiring. They do not prove the Poetry path.
+- **Pinned unit contract.** Run `.cursor/skills/verify-ave/control-ave capture pinned-env-tests -- pytest -- tests/test_pinned_env.py -q`. Exit code `0`; stdout reports `53 passed`. These tests lock explicit outcomes, patch proof, redaction, and graph wiring. They do not prove the Poetry path.
 - **Proof.** Keep `artifacts/pinned-env-run/` and the printed local PR bundle. Confirm `git status --porcelain -- README.md target` is unchanged from before the drive.
 
 ## Gotchas
