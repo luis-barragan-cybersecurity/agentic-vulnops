@@ -20,9 +20,9 @@ import difflib
 import inspect
 from typing import Any
 
-from ave.adapters.base import PreparedFix
+from ave.adapters.base import PinnedExploitResult, PreparedFix
+from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
-from ave.adapters.python_authz import catalog
 from ave.state import Finding
 
 
@@ -155,3 +155,20 @@ class PythonAuthzPack:
         """T2's positive check: the fix must not break the legitimate owner's access."""
         impl = target.get_order_fixed if fixed else target.get_order_vulnerable
         return target.legitimate_owner_read(impl)
+
+    # --- Optional capability: the pinned-env runner (adapters.base.PinnedEnvCapable). ---
+    # The SECOND runner shape. `run_exploit` above is the hermetic in-process oracle; these
+    # two methods run the anchor's by-path oracle inside the target's pinned Poetry env and
+    # capture the real attack exchange. Both delegate to `_pinned_env`, which is honest by
+    # construction (env absent => `ran=False`, never a fabricated pass or transcript). The
+    # two-runner-shape tension is recorded for ticket 14 on the Protocol.
+
+    def pinned_env_available(self) -> bool:
+        """True only when the vendored target and `poetry` are both present."""
+        return _pinned_env.env_available()
+
+    def run_pinned_exploit(self, finding: Finding) -> PinnedExploitResult:
+        """Run the finding's by-path oracle in the pinned env, capturing the attack
+        exchange. Never raises: a non-anchor finding (no pinned harness yet) or an absent
+        env both return a `ran=False` result."""
+        return _pinned_env.run_pinned_capture(finding)
