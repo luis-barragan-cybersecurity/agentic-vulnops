@@ -87,11 +87,16 @@ def test_sanitized_exchange_accepts_a_clean_transcript() -> None:
     assert _pinned_env.sanitized_exchange(dict(_CLEAN_EXCHANGE)) == _CLEAN_EXCHANGE
 
 
-def _exchange_with(*, request: str | None = None, before: str | None = None) -> dict[str, str]:
+def _exchange_with(
+    *,
+    request: str | None = None,
+    before: str | None = None,
+    after: str | None = None,
+) -> dict[str, str]:
     return {
         "request": request if request is not None else _CLEAN_EXCHANGE["request"],
         "before_response": before if before is not None else _CLEAN_EXCHANGE["before_response"],
-        "after_response": _CLEAN_EXCHANGE["after_response"],
+        "after_response": after if after is not None else _CLEAN_EXCHANGE["after_response"],
     }
 
 
@@ -99,10 +104,13 @@ def _exchange_with(*, request: str | None = None, before: str | None = None) -> 
     "bad",
     [
         _exchange_with(request="GET / HTTP/1.1\nAuthorization: Bearer x"),
+        _exchange_with(request="GET / HTTP/1.1\nX-API-Key: " + _LEAK),
         _exchange_with(before="HTTP/1.1 200 OK\nSet-Cookie: session=x"),
         _exchange_with(before="HTTP/1.1 404\n```\ninjection"),
         _exchange_with(request="GET /\x00 HTTP/1.1"),
+        _exchange_with(request="GET /\x7f HTTP/1.1"),
         _exchange_with(request="GET /?token=" + _LEAK + " HTTP/1.1"),
+        _exchange_with(request="GET /?to%6ben=" + _LEAK + " HTTP/1.1"),
         _exchange_with(request="GET / HTTP/1.1\nHost: testserver\nAccept: */*\n\npassword=" + _LEAK),
         _exchange_with(before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"token":"' + _LEAK + '"}'),
         _exchange_with(
@@ -159,16 +167,21 @@ def test_runner_and_renderer_reject_unsafe_exchanges(bad: dict[str, Any]) -> Non
 
 
 @pytest.mark.parametrize(
-    ("before", "after", "flipped"),
-    [(200, 404, True), (200, 403, True), (200, 200, False), (403, 404, False)],
+    ("before", "after", "flipped", "status"),
+    [
+        (200, 404, True, "success"),
+        (200, 403, True, "success"),
+        (200, 200, False, "not_flipped"),
+        (403, 404, False, "not_flipped"),
+    ],
 )
 def test_interpret_maps_statuses_to_flip(
-    before: int, after: int, flipped: bool
+    before: int, after: int, flipped: bool, status: str
 ) -> None:
     result = _pinned_env._interpret(
         {"before_status": before, "after_status": after, "attack_exchange": _CLEAN_EXCHANGE}
     )
-    assert result["status"] == "success"
+    assert result["status"] == status
     assert result["flipped"] is flipped
 
 
@@ -219,6 +232,32 @@ def test_pinned_flip_false_leaves_t1_red(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     final = run_once({**_INITIAL, "use_pinned_env": True}, auto_approve=True)
     assert final.get("verification", {}).get("t1_exploit_oracle_flipped") is False
+
+
+def test_non_flipping_capture_does_not_claim_a_deny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    not_flipped = _exchange_with(
+        after=(
+            "HTTP/1.1 200 OK\ncontent-type: application/json\n\n"
+            '{"id":500,"user_id":99}'
+        )
+    )
+    _simulate_available_env(
+        monkeypatch,
+        _canned_result(
+            status="not_flipped",
+            flipped=False,
+            after_blocked=False,
+            attack_exchange=not_flipped,
+        ),
+    )
+    final = run_once({**_INITIAL, "use_pinned_env": True}, auto_approve=True)
+    body = render_pr_body(final)
+
+    assert final["verification"]["t1_exploit_oracle_flipped"] is False
+    assert "After the generated patch, the target answered:" in body
+    assert "same request is denied" not in body
 
 
 @pytest.mark.parametrize(

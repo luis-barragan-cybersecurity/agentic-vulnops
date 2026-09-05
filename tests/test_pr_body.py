@@ -54,6 +54,13 @@ def test_default_run_span_shape_matches_example_run_contract() -> None:
     assert "pinned_exploit" not in final
 
 
+def test_default_run_discloses_hermetic_t1_provenance() -> None:
+    body = _render_fresh()
+    ladder = body[body.find("## Verification ladder") : body.find("## Blast radius")]
+    assert "hermetic in-process model flipped" in ladder
+    assert "generated patch was not executed by this run" in ladder
+
+
 def test_committed_example_artifacts_share_the_fail_closed_route() -> None:
     record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
     decide_span = next(span for span in record["spans"] if span["phase"] == "decide")
