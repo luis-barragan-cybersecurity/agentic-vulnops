@@ -111,6 +111,10 @@ def _exchange_with(
         _exchange_with(request="GET /\x7f HTTP/1.1"),
         _exchange_with(request="GET /?token=" + _LEAK + " HTTP/1.1"),
         _exchange_with(request="GET /?to%6ben=" + _LEAK + " HTTP/1.1"),
+        _exchange_with(request="GET /?x-api-key=" + _LEAK + " HTTP/1.1"),
+        _exchange_with(
+            request="GET /?authorization=Bearer%20" + _LEAK + " HTTP/1.1"
+        ),
         _exchange_with(request="GET / HTTP/1.1\nHost: testserver\nAccept: */*\n\npassword=" + _LEAK),
         _exchange_with(before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"token":"' + _LEAK + '"}'),
         _exchange_with(
