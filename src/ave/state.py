@@ -36,6 +36,7 @@ class VerificationLadder(TypedDict, total=False):
 
 PinnedStatus = Literal[
     "success",
+    "not_flipped",
     "unavailable",
     "launch_failed",
     "patch_failed",

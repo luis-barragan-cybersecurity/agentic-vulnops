@@ -43,7 +43,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 ## Features
 
 - [Run the loop](./run-stub-loop.md) covers `ave run` / `make run` through the graph with auto-approve and a local PR bundle.
-- [Pinned-environment run](./pinned-env-run.md) covers the `AVE_PINNED_ENV` opt-in, isolated patch application, captured exchange, pinned T1, and explicit failure outcomes.
+- [Pinned-environment run](./pinned-env-run.md) covers the `AVE_PINNED_ENV` opt-in, generated-patch proof, captured exchange, pinned T1, and explicit failure outcomes.
 - [Eradicate demo](./eradicate-demo.md) covers `break` then `run` as `ave eradicate` / `make eradicate`.
 - [Scoreboard](./scoreboard.md) covers the results-table command and proves it does not edit the README.
 - [HITL gate](./hitl-gate.md) covers the pause before Prepare. CLI cannot do this today.

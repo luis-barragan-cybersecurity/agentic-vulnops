@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Literal, TypedDict
+from urllib.parse import unquote_plus
 
 from ave.adapters.base import PinnedExploitResult, PinnedStatus
 from ave.state import Finding
@@ -21,7 +22,16 @@ _POETRY_INFO_TIMEOUT_S = 60
 _EXCHANGE_FIELDS: tuple[str, ...] = ("request", "before_response", "after_response")
 _MAX_FIELD_LEN = 4000
 _FENCE = "```"
-_SECRET_HEADERS: tuple[str, ...] = ("authorization:", "cookie:", "set-cookie:")
+_SECRET_HEADERS: tuple[str, ...] = (
+    "authorization:",
+    "proxy-authorization:",
+    "cookie:",
+    "set-cookie:",
+    "api-key:",
+    "x-api-key:",
+    "x-auth-token:",
+    "x-access-token:",
+)
 _BEARER = "bearer "
 _CREDENTIAL_KEYS = {
     "token",
@@ -105,7 +115,10 @@ def _resolve_interpreter() -> Path | None:
 
 
 def _has_disallowed_control(value: str) -> bool:
-    return any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value)
+    return any(
+        (ord(ch) < 32 or 127 <= ord(ch) <= 159) and ch not in "\r\n\t"
+        for ch in value
+    )
 
 
 def _is_credential_key(value: str) -> bool:
@@ -116,7 +129,10 @@ def _is_credential_key(value: str) -> bool:
 def _query_or_form_credentials(value: str) -> bool:
     return any(
         _is_credential_key(match.group(1))
-        for match in re.finditer(r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=", value)
+        for match in re.finditer(
+            r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=",
+            unquote_plus(value),
+        )
     )
 
 
@@ -301,8 +317,9 @@ def _interpret(payload: dict[str, Any]) -> PinnedExploitResult:
             flipped=False,
             patch_applied=True,
         )
+    status: PinnedStatus = "success" if flipped else "not_flipped"
     return _outcome(
-        "success",
+        status,
         (
             f"pinned env ran: before={payload.get('before_status')} "
             f"after={payload.get('after_status')}"

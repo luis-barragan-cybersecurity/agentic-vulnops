@@ -3,6 +3,7 @@ import json
 import os
 import re
 from typing import Any
+from urllib.parse import unquote_plus
 
 from apis.auth.utils import get_current_user
 from db.models import Order, OrderStatus, User, UserRole
@@ -12,7 +13,16 @@ from sqlalchemy.orm import Session
 
 _MAX = 4000
 _FENCE = "```"
-_SECRET_HEADERS = ("authorization:", "cookie:", "set-cookie:")
+_SECRET_HEADERS = (
+    "authorization:",
+    "proxy-authorization:",
+    "cookie:",
+    "set-cookie:",
+    "api-key:",
+    "x-api-key:",
+    "x-auth-token:",
+    "x-access-token:",
+)
 _BEARER = "bearer "
 _CREDENTIAL_KEYS = {
     "token",
@@ -30,7 +40,10 @@ _CREDENTIAL_KEYS = {
 
 
 def _has_disallowed_control(value: str) -> bool:
-    return any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value)
+    return any(
+        (ord(ch) < 32 or 127 <= ord(ch) <= 159) and ch not in "\r\n\t"
+        for ch in value
+    )
 
 
 def _is_credential_key(value: str) -> bool:
@@ -41,7 +54,10 @@ def _is_credential_key(value: str) -> bool:
 def _query_or_form_credentials(value: str) -> bool:
     return any(
         _is_credential_key(match.group(1))
-        for match in re.finditer(r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=", value)
+        for match in re.finditer(
+            r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=",
+            unquote_plus(value),
+        )
     )
 
 

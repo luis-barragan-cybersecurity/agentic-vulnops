@@ -16,7 +16,7 @@
 | Rung | Status | Evidence |
 |---|---|---|
 | T0 — target builds | ⬜ not green | — |
-| T1 — exploit oracle flipped (green → red) | ✅ | `app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read` flipped green → red |
+| T1 — exploit oracle flipped (green → red) | ✅ | hermetic in-process model flipped; generated patch was not executed by this run |
 | T2 — target's own suite | ⬜ not green | — |
 | Re-attack — original attack replayed post-fix | ⬜ not green | — |
 

@@ -68,8 +68,8 @@ Stable handles:
 - Invariant line `invariant: OK (no run records to validate yet)` (CLI still does not load `results/runs/`)
 - Pause pytest node `tests/test_graph_smoke.py::test_run_halts_at_the_hitl_gate_before_approval`
 - Resume pytest node `tests/test_walking_skeleton.py::test_loop_runs_end_to_end_and_produces_a_pr`
-- PR-body contract node `tests/test_pr_body.py` (18 tests; golden comparison normalizes only run IDs and timestamps)
-- Pinned-run contract node `tests/test_pinned_env.py` (47 tests)
+- PR-body contract node `tests/test_pr_body.py` (19 tests; golden comparison normalizes only run IDs and timestamps)
+- Pinned-run contract node `tests/test_pinned_env.py` (51 tests)
 - Pinned opt-in environment variable `AVE_PINNED_ENV`
 - Baseline heading `AVE role-pattern Semgrep baseline — score vs target catalog`
 - Baseline class-aware BOLA line `BOLA  recall : 0%  (0/4)`
@@ -95,7 +95,7 @@ Proof standards:
 - Check side effects, not slogans. `break` prints that the catalog is already seeded and writes nothing under `target/`. `scoreboard` prints a ticket-05 stub and does not edit the README. `run` / `eradicate` write gitignored files under `results/runs/<id>/`. Confirm `git -C <repo> status --porcelain -- README.md target` stays empty.
 - The generated PR body is a product artifact. Inspect the path printed by `run`; only T1 is green and readiness is `no`. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison.
 - An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE ran the same capture test against the original target and an isolated copy after applying the generated patch. The tracked target remains unchanged.
-- A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.
+- A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `not_flipped`, `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.
 - `make baseline` is a separate pattern-scanner comparator. It may run live Semgrep and refresh `semgrep-findings.json`, or replay that committed file when Semgrep is unavailable; both paths rewrite `results.json`. Record the source line and pre-drive status of `evals/baseline/semgrep/`.
 - `python -m ave.invariant --check` still prints the vacuous OK even after live runs have written records. Record the exact stdout. Do not report it as "the invariant held over run records."
 - `make eval` (promptfoo) is a secondary surface. It is not in the first feature map. Skip it unless you are extending the map. It needs network for `npx`.
