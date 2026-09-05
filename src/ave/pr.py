@@ -43,6 +43,53 @@ _NOT_CAPTURED = (
     "below shows what this run proved; no transcript is inferred from that result."
 )
 
+# The captured attack exchange is untrusted input, even from AVE's own pinned-env harness:
+# it is HTTP text that ends up inside the public PR body verbatim. The renderer fail-closes
+# — a captured exchange is rendered ONLY when it is a complete, secret-free, injection-free
+# transcript. Anything else falls back to "not captured" rather than leaking a header or
+# breaking out of the fenced block. (The harness redacts at capture; this is the independent
+# second gate at the boundary.)
+_EXCHANGE_FIELDS: tuple[str, ...] = ("request", "before_response", "after_response")
+# Substrings that mark a transcript we refuse to render: a fence breakout, or a
+# secret-bearing header/token. Matched case-insensitively.
+_EXCHANGE_FORBIDDEN: tuple[str, ...] = (
+    "```",
+    "authorization:",
+    "cookie:",
+    "set-cookie:",
+    "bearer ",
+    "token=",
+    "session=",
+)
+_EXCHANGE_MAX_FIELD_LEN = 4000
+
+
+def _safe_attack_exchange(change: dict[str, Any]) -> dict[str, str] | None:
+    """Return the captured exchange only if it is safe to render verbatim, else None.
+
+    Fail-closed: every one of the three fields must be a non-empty string, within a length
+    cap, free of control characters (beyond CR/LF/TAB), and free of any forbidden substring
+    (a markdown fence, or a secret-bearing header/token). A single failure rejects the whole
+    exchange — a partial transcript is never rendered."""
+    exchange = change.get("attack_exchange")
+    if not isinstance(exchange, dict):
+        return None
+    cleaned: dict[str, str] = {}
+    for key in _EXCHANGE_FIELDS:
+        value = exchange.get(key)
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip("\n")
+        if not stripped.strip() or len(value) > _EXCHANGE_MAX_FIELD_LEN:
+            return None
+        if any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value):
+            return None
+        lowered = value.lower()
+        if any(bad in lowered for bad in _EXCHANGE_FORBIDDEN):
+            return None
+        cleaned[key] = stripped
+    return cleaned
+
 
 def _oracle_ref(finding: dict[str, Any]) -> str:
     evidence = finding.get("evidence")
@@ -59,10 +106,39 @@ def _endpoint(finding: dict[str, Any]) -> str:
     return str(endpoint) if endpoint else ""
 
 
-def _attack_exchange(finding: dict[str, Any]) -> list[str]:
+def _captured_transcript(safe: dict[str, str]) -> list[str]:
+    """Render a validated exchange verbatim, in fenced `http` blocks — the request, the
+    vulnerable response the target actually gave, and the deny the fix replaced it with."""
+    return [
+        "The exploit oracle ran in the target's pinned environment. The captured exchange, "
+        "verbatim:",
+        "",
+        "**The attack request**",
+        "```http",
+        safe["request"],
+        "```",
+        "",
+        "**Before the fix — the target answered (the vulnerability):**",
+        "```http",
+        safe["before_response"],
+        "```",
+        "",
+        "**After the fix — the same request is denied (a 404 stays a 404):**",
+        "```http",
+        safe["after_response"],
+        "```",
+        "",
+    ]
+
+
+def _attack_exchange(finding: dict[str, Any], change: dict[str, Any]) -> list[str]:
     lines = ["## The attack, and the deny that replaced it", ""]
-    lines.append(_NOT_CAPTURED)
-    lines.append("")
+    safe = _safe_attack_exchange(change)
+    if safe is not None:
+        lines.extend(_captured_transcript(safe))
+    else:
+        lines.append(_NOT_CAPTURED)
+        lines.append("")
     facts: list[str] = []
     endpoint = _endpoint(finding)
     if endpoint:
@@ -343,7 +419,7 @@ def render_pr_body(state: AVEState) -> str:
         f"· policy `{policy_version}`"
     )
     lines.append("")
-    lines.extend(_attack_exchange(finding))
+    lines.extend(_attack_exchange(finding, change))
     lines.extend(_ladder(finding, ladder, ready))
     lines.extend(_blast_radius_blocks(finding, findings, blast, policy_version))
     lines.extend(_decision_details(decision))

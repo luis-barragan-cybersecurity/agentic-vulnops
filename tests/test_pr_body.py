@@ -155,6 +155,34 @@ def test_incomplete_attack_exchange_is_not_rendered() -> None:
     assert "```http" not in exchange
 
 
+def test_valid_captured_exchange_renders_verbatim() -> None:
+    """A complete, secret-free exchange (what the pinned-env harness produces) renders as
+    the opener's fenced transcript instead of the 'not captured' fallback."""
+    state = run_once(_INITIAL, auto_approve=True)
+    change = dict(state.get("prepared_change") or {})
+    change["attack_exchange"] = {
+        "request": "GET /orders/500 HTTP/1.1\nHost: testserver\nAccept: */*",
+        "before_response": (
+            'HTTP/1.1 200 OK\ncontent-type: application/json\n\n'
+            '{"id":500,"user_id":99}'
+        ),
+        "after_response": (
+            'HTTP/1.1 404 Not Found\ncontent-type: application/json\n\n'
+            '{"detail":"Order not found"}'
+        ),
+    }
+    body = render_pr_body({**state, "prepared_change": change})
+    exchange = body[: body.find("## Verification ladder")]
+    assert "Exchange not captured by this run." not in exchange
+    assert exchange.count("```http") == 3
+    assert "GET /orders/500 HTTP/1.1" in exchange
+    assert "200 OK" in exchange and "404 Not Found" in exchange
+    # The locked section order still holds with a rendered transcript.
+    assert body.find("## The attack, and the deny that replaced it") < body.find(
+        "## Verification ladder"
+    ) < body.find("## Blast radius")
+
+
 def test_unmeasured_blast_radius_fails_closed_and_renders_honestly() -> None:
     state = run_once(_INITIAL, auto_approve=True)
     decision = dict(state.get("decision_record") or {})
