@@ -43,6 +43,17 @@ def test_golden_render_matches_the_committed_example_run() -> None:
     assert _normalize(_render_fresh()) == _normalize(_GOLDEN.read_text(encoding="utf-8"))
 
 
+def test_default_run_span_shape_matches_example_run_contract() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
+    for phase in ("prepare", "verify"):
+        live = next(span for span in final["spans"] if span["phase"] == phase)
+        golden = next(span for span in record["spans"] if span["phase"] == phase)
+        assert live["attributes"] == golden["attributes"]
+    assert "use_pinned_env" not in final
+    assert "pinned_exploit" not in final
+
+
 def test_committed_example_artifacts_share_the_fail_closed_route() -> None:
     record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
     decide_span = next(span for span in record["spans"] if span["phase"] == "decide")
