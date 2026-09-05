@@ -24,10 +24,12 @@ applicable diff).
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 from ave.policy import load_policy
-from ave.state import AVEState
+from ave.state import AVEState, PinnedExploitResult
 
 # Rung key -> (label, one-line meaning). Order is the ladder's order.
 _LADDER_ROWS: list[tuple[str, str]] = [
@@ -38,9 +40,9 @@ _LADDER_ROWS: list[tuple[str, str]] = [
 ]
 
 _NOT_CAPTURED = (
-    "> **Exchange not captured by this run.** The exploit oracle ran through the pack's "
-    "harness, which records an oracle result but no HTTP request or response. The ladder "
-    "below shows what this run proved; no transcript is inferred from that result."
+    "> **Exchange not captured by this run.** No complete, validated HTTP request and "
+    "response pair is available. The ladder below shows what this run proved; no "
+    "transcript is inferred."
 )
 
 # The captured attack exchange is untrusted input, even from AVE's own pinned-env harness:
@@ -50,27 +52,100 @@ _NOT_CAPTURED = (
 # breaking out of the fenced block. (The harness redacts at capture; this is the independent
 # second gate at the boundary.)
 _EXCHANGE_FIELDS: tuple[str, ...] = ("request", "before_response", "after_response")
-# Substrings that mark a transcript we refuse to render: a fence breakout, or a
-# secret-bearing header/token. Matched case-insensitively.
-_EXCHANGE_FORBIDDEN: tuple[str, ...] = (
-    "```",
-    "authorization:",
-    "cookie:",
-    "set-cookie:",
-    "bearer ",
-    "token=",
-    "session=",
-)
 _EXCHANGE_MAX_FIELD_LEN = 4000
+_FENCE = "```"
+_SECRET_HEADERS: tuple[str, ...] = ("authorization:", "cookie:", "set-cookie:")
+_BEARER = "bearer "
+_CREDENTIAL_KEYS = {
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "apikey",
+    "clientsecret",
+    "jwt",
+    "password",
+    "secret",
+    "session",
+    "cookie",
+}
+_PINNED_PR_REASON: dict[str, str] = {
+    "unavailable": "Pinned execution was requested but the environment is not available.",
+    "launch_failed": "Pinned execution was requested but the environment failed to launch.",
+    "patch_failed": "Pinned execution was requested but the generated patch did not apply.",
+    "test_failed": "Pinned execution was requested but the capture harness failed.",
+    "malformed": "Pinned execution was requested but the capture was malformed.",
+    "unsafe_capture": "Pinned execution was requested but the capture failed the redaction gate.",
+}
+
+
+def _has_disallowed_control(value: str) -> bool:
+    return any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value)
+
+
+def _is_credential_key(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", value.lower())
+    return normalized in _CREDENTIAL_KEYS
+
+
+def _query_or_form_credentials(value: str) -> bool:
+    return any(
+        _is_credential_key(match.group(1))
+        for match in re.finditer(r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=", value)
+    )
+
+
+def _walk_credential_keys(obj: Any) -> bool:
+    if isinstance(obj, dict):
+        for key, child in obj.items():
+            if _is_credential_key(str(key)):
+                return True
+            if _walk_credential_keys(child):
+                return True
+        return False
+    if isinstance(obj, list):
+        return any(_walk_credential_keys(item) for item in obj)
+    return False
+
+
+def _json_credential_fields(value: str) -> bool:
+    if any(
+        _is_credential_key(match.group(1))
+        for match in re.finditer(r'"([^"]+)"\s*:', value)
+    ):
+        return True
+    candidates = [value]
+    parts = re.split(r"\r?\n\r?\n", value, maxsplit=1)
+    if len(parts) == 2:
+        candidates.append(parts[1])
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if _walk_credential_keys(parsed):
+            return True
+    return False
+
+
+def _field_is_unsafe(value: str) -> bool:
+    if _has_disallowed_control(value) or _FENCE in value:
+        return True
+    lowered = value.lower()
+    if any(header in lowered for header in _SECRET_HEADERS) or _BEARER in lowered:
+        return True
+    if _query_or_form_credentials(value):
+        return True
+    return _json_credential_fields(value)
 
 
 def _safe_attack_exchange(change: dict[str, Any]) -> dict[str, str] | None:
     """Return the captured exchange only if it is safe to render verbatim, else None.
 
-    Fail-closed: every one of the three fields must be a non-empty string, within a length
-    cap, free of control characters (beyond CR/LF/TAB), and free of any forbidden substring
-    (a markdown fence, or a secret-bearing header/token). A single failure rejects the whole
-    exchange — a partial transcript is never rendered."""
+    Independent renderer gate. Fences, disallowed control characters, secret-bearing
+    headers, bearer values, query/form credential keys, and structured JSON credential
+    fields reject the whole exchange. The rejected value is not rendered.
+    """
     exchange = change.get("attack_exchange")
     if not isinstance(exchange, dict):
         return None
@@ -82,10 +157,7 @@ def _safe_attack_exchange(change: dict[str, Any]) -> dict[str, str] | None:
         stripped = value.strip("\n")
         if not stripped.strip() or len(value) > _EXCHANGE_MAX_FIELD_LEN:
             return None
-        if any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value):
-            return None
-        lowered = value.lower()
-        if any(bad in lowered for bad in _EXCHANGE_FORBIDDEN):
+        if _field_is_unsafe(value):
             return None
         cleaned[key] = stripped
     return cleaned
@@ -131,7 +203,11 @@ def _captured_transcript(safe: dict[str, str]) -> list[str]:
     ]
 
 
-def _attack_exchange(finding: dict[str, Any], change: dict[str, Any]) -> list[str]:
+def _attack_exchange(
+    finding: dict[str, Any],
+    change: dict[str, Any],
+    pinned: PinnedExploitResult | None = None,
+) -> list[str]:
     lines = ["## The attack, and the deny that replaced it", ""]
     safe = _safe_attack_exchange(change)
     if safe is not None:
@@ -139,6 +215,11 @@ def _attack_exchange(finding: dict[str, Any], change: dict[str, Any]) -> list[st
     else:
         lines.append(_NOT_CAPTURED)
         lines.append("")
+        status = pinned.get("status") if pinned is not None else None
+        reason = _PINNED_PR_REASON.get(str(status), "") if status else ""
+        if reason:
+            lines.append(f"> **{reason}**")
+            lines.append("")
     facts: list[str] = []
     endpoint = _endpoint(finding)
     if endpoint:
@@ -406,6 +487,8 @@ def render_pr_body(state: AVEState) -> str:
     ready = bool(state.get("ready_to_merge"))
     policy_version = str(state.get("policy_version", "unset"))
     run_id = str(state.get("run_record_id", "unset"))
+    pinned = state.get("pinned_exploit")
+    pinned_dict = pinned if isinstance(pinned, dict) else None
 
     lines: list[str] = []
     lines.append(f"# AVE fix: {change.get('summary', '(no change)')}")
@@ -419,7 +502,7 @@ def render_pr_body(state: AVEState) -> str:
         f"· policy `{policy_version}`"
     )
     lines.append("")
-    lines.extend(_attack_exchange(finding, change))
+    lines.extend(_attack_exchange(finding, change, pinned_dict))
     lines.extend(_ladder(finding, ladder, ready))
     lines.extend(_blast_radius_blocks(finding, findings, blast, policy_version))
     lines.extend(_decision_details(decision))

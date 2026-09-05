@@ -30,7 +30,7 @@ Preconditions:
 - **Artifacts.** Stdout contains `run_record`, `pr_body`, and `patch` lines under `results/runs/<id>/`. That directory exists. `git status --porcelain -- README.md target` is empty.
 - **Trace.** Stdout contains a JSON object with `"name": "ave.run"` and `"service.name": "ave"`.
 - **PR body.** Open the printed `pr_body` path. It contains the attack exchange, verification ladder, four blast-radius blocks, and collapsed decision record in that order. Only T1 is green and `Ready to merge` is `no`.
-- **PR-body contract.** Run `.cursor/skills/verify-ave/control-ave capture pr-body-template -- pytest -- tests/test_pr_body.py -q`. Exit code `0`; stdout reports `17 passed`. This proves the fresh renderer matches `results/example-run/pr/PR_BODY.md` after only run IDs and timestamps are normalized.
+- **PR-body contract.** Run `.cursor/skills/verify-ave/control-ave capture pr-body-template -- pytest -- tests/test_pr_body.py -q`. Exit code `0`; stdout reports `18 passed`. This proves the fresh renderer matches `results/example-run/pr/PR_BODY.md` after only run IDs and timestamps are normalized.
 - **Make entry.** Run the Makefile verb. Run `.cursor/skills/verify-ave/control-ave make -- run`. Same four summary lines and exit `0`.
 - **Proof.** Keep `artifacts/run-stub-loop/stdout.txt` and `exit_code.txt`. They show the command completed and claimed no merge.
 

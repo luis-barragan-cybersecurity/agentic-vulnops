@@ -1,12 +1,23 @@
---- a/_skeleton_target.py:get_order
-+++ b/_skeleton_target.py:get_order
-@@ -1,4 +1,6 @@
- def get_order(order_id: int, current_user: str) -> dict[str, Any]:
--    """BOLA: returns the requested object with no ownership check — any authenticated
--    user can read any order."""
--    return _ORDERS[order_id]
-+    """The class-level fix: enforce object ownership before returning the object."""
-+    order = _ORDERS[order_id]
-+    if order["owner"] != current_user:
-+        raise PermissionError("not the owner of this order")
-+    return order
+--- a/target/dvrestaurant/app/apis/orders/services/get_order_service.py
++++ b/target/dvrestaurant/app/apis/orders/services/get_order_service.py
+@@ -1,6 +1,6 @@
+-from apis.auth.utils import RolesBasedAuthChecker
++from apis.auth.utils import RolesBasedAuthChecker, get_current_user
+ from apis.orders import schemas
+-from db.models import Order, UserRole
++from db.models import Order, User, UserRole
+ from db.session import get_db
+ from fastapi import APIRouter, Depends, HTTPException
+ from sqlalchemy.orm import Session
+@@ -13,8 +13,11 @@
+     order_id: int,
+     db: Session = Depends(get_db),
+     auth=Depends(RolesBasedAuthChecker([UserRole.CUSTOMER])),
++    current_user: User = Depends(get_current_user),
+ ):
+     db_order = db.query(Order).filter(Order.id == order_id).first()
+     if db_order is None:
+         raise HTTPException(status_code=404, detail="Order not found")
++    if db_order.user_id != current_user.id:
++        raise HTTPException(status_code=404, detail="Order not found")
+     return db_order

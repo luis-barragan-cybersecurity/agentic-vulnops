@@ -16,34 +16,11 @@ real vendored-target catalog is ticket 04; a second-language pack is roadmap (D3
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ave.state import Finding
-
-
-class PinnedExploitResult(TypedDict):
-    """The result of running an instance's exploit oracle in the target's *pinned*
-    environment — the second runner shape (see `PinnedEnvCapable`). Neutral by construction
-    (no `authz`/`fastapi`/HTTP specifics in the core's view): the captured transcript rides
-    opaquely in `attack_exchange` and is interpreted only by the renderer's own fail-closed
-    validator.
-
-    - `ran`: did the pinned env actually run? False is the honest skip (env absent) — never
-      a fabricated pass.
-    - `before_vulnerable` / `after_blocked`: the two halves of the inverted-polarity flip,
-      measured against the real target; None when not run.
-    - `flipped`: `before_vulnerable and after_blocked` — the pinned T1 signal; None when not
-      run.
-    - `attack_exchange`: the captured, already-redacted transcript
-      (`request` / `before_response` / `after_response`), or None when not captured.
-    - `detail`: one line on what happened, for the run record and logs."""
-
-    ran: bool
-    before_vulnerable: bool | None
-    after_blocked: bool | None
-    flipped: bool | None
-    attack_exchange: dict[str, Any] | None
-    detail: str
+from ave.state import PinnedExploitResult as PinnedExploitResult
+from ave.state import PinnedStatus as PinnedStatus
 
 
 class PreparedFix(dict[str, Any]):
@@ -105,31 +82,15 @@ class LanguagePack(Protocol):
 
 @runtime_checkable
 class PinnedEnvCapable(Protocol):
-    """An *optional* pack capability: running an instance's by-path exploit oracle inside
-    the target's pinned environment, against the real target rather than the pack's hermetic
-    in-process model — and capturing the real attack exchange while there.
+    """Optional pinned-environment runner for an already prepared fix.
 
-    This is deliberately **not** part of `LanguagePack`. It surfaces a seam smell the core
-    is not yet ready to name: the exploit-oracle harness now has **two runner shapes** — the
-    hermetic in-process `run_exploit()` that drives `make check` without any target env, and
-    this pinned-subprocess shape that needs the target stood up. The core selects between
-    them by a capability probe (`isinstance(pack, PinnedEnvCapable)` + `pinned_env_available()`),
-    not by a first-class Runner abstraction on the seam. Unifying the two shapes behind one
-    named Runner strategy is **ticket 14** (language-pack seam hardening); until then this
-    stays an add-on Protocol so a pack without a pinned env is not forced to implement it and
-    the core stays D3-neutral.
+    Every requested run returns an explicit outcome. Unavailable or failed runs do not
+    fall back to the hermetic oracle."""
 
-    Honesty contract: `pinned_env_available()` is False when the env is absent, and every
-    entry point returns a `ran=False` result rather than a fabricated pass or transcript."""
-
-    def pinned_env_available(self) -> bool:
-        """True only when this pack can actually run the pinned env right now (the target is
-        present and its runner is on PATH). False is the signal to fall back to the hermetic
-        oracle — the core never treats an unavailable env as a passing one."""
-        ...
-
-    def run_pinned_exploit(self, finding: Finding) -> PinnedExploitResult:
-        """Run the finding's by-path oracle in the pinned env and capture the attack
-        exchange. Returns a `ran=False` result (never raises) when the env is absent or the
-        instance has no pinned harness, so a caller can always trust the `ran` flag."""
+    def run_pinned_exploit(
+        self, finding: Finding, prepared: dict[str, Any]
+    ) -> PinnedExploitResult:
+        """Apply `prepared["patch"]` in an isolated copy and run the finding's by-path
+        oracle against the original target and that copy. Never raises; every failure is an
+        explicit `PinnedStatus`."""
         ...

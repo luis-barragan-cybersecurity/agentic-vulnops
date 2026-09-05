@@ -17,13 +17,52 @@ pinned env, are the next deepening (find-stage / execution), tracked on the map.
 from __future__ import annotations
 
 import difflib
-import inspect
+from pathlib import Path
 from typing import Any
 
 from ave.adapters.base import PinnedExploitResult, PreparedFix
 from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
 from ave.state import Finding
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_GET_ORDER = (
+    _REPO_ROOT
+    / "target"
+    / "dvrestaurant"
+    / "app"
+    / "apis"
+    / "orders"
+    / "services"
+    / "get_order_service.py"
+)
+_PATCH_REL = "target/dvrestaurant/app/apis/orders/services/get_order_service.py"
+
+_FIXED_GET_ORDER = """\
+from apis.auth.utils import RolesBasedAuthChecker, get_current_user
+from apis.orders import schemas
+from db.models import Order, User, UserRole
+from db.session import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+router = APIRouter()
+
+
+@router.get("/orders/{order_id}", response_model=schemas.Order)
+def get_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    auth=Depends(RolesBasedAuthChecker([UserRole.CUSTOMER])),
+    current_user: User = Depends(get_current_user),
+):
+    db_order = db.query(Order).filter(Order.id == order_id).first()
+    if db_order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if db_order.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return db_order
+"""
 
 
 def _no_oracle(finding: Finding) -> NotImplementedError:
@@ -86,57 +125,30 @@ class PythonAuthzPack:
         }
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
-        """The proposed class-level remediation surface for the anchor: route object reads
-        through a shared ownership guard rather than inlining an `if user.id == ...` check
-        at the one endpoint. These are the files a *real* fix would touch. Because the
-        blast-radius dimensions are unmeasured, `decide()` routes the plan to
-        `hitl_approved` through `unknown_blast_radius`. `decide()` judges this proposal at
-        Decide-time (before Prepare);
-        re-checking the *realized* patch against the same predicate is the before_execute
-        ring gate's job (deferred to a follow-up ticket). In the walking skeleton
-        `prepare_fix` models the diff in-process, so its headers name
-        `_skeleton_target.py`, not these files (caveated on the PreparedFix); on a real
-        target the realized patch touches exactly these paths and that re-check agrees."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
         return {
-            "changed_paths": [
-                "app/apis/orders/authorization.py",
-                "app/apis/orders/dependencies.py",
-            ],
+            "changed_paths": ["app/apis/orders/services/get_order_service.py"],
             "is_class_level": True,
             "preserves_legitimate_access": True,
         }
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:
-        """The class-level fix for the anchor: add the ownership guard. The patch is a
-        real unified diff between the vulnerable and fixed implementations (modelled
-        in-process; the vendored file it stands for is
-        `target/dvrestaurant/app/apis/orders/services/get_order_service.py`)."""
         if not self._is_anchor(finding):
             raise _no_oracle(finding)
-        before = inspect.getsource(target.get_order_vulnerable)
-        after = inspect.getsource(target.get_order_fixed).replace(
-            "get_order_fixed", "get_order", 1
-        )
-        before = before.replace("get_order_vulnerable", "get_order", 1)
+        before = _GET_ORDER.read_text(encoding="utf-8")
         patch = "".join(
             difflib.unified_diff(
                 before.splitlines(keepends=True),
-                after.splitlines(keepends=True),
-                fromfile="a/_skeleton_target.py:get_order",
-                tofile="b/_skeleton_target.py:get_order",
+                _FIXED_GET_ORDER.splitlines(keepends=True),
+                fromfile=f"a/{_PATCH_REL}",
+                tofile=f"b/{_PATCH_REL}",
             )
         )
         return PreparedFix(
             class_level=True,
             summary="Enforce object ownership in get_order (BOLA class-level fix)",
             patch=patch,
-            patch_caveat=(
-                "Not an applicable diff. This patch is the in-process model of the fix "
-                "(`_skeleton_target.py`), which is why its headers name a different file "
-                "than the finding above."
-            ),
             finding_id=finding.get("id"),
             blast_radius=self.blast_radius(finding),
         )
@@ -156,19 +168,7 @@ class PythonAuthzPack:
         impl = target.get_order_fixed if fixed else target.get_order_vulnerable
         return target.legitimate_owner_read(impl)
 
-    # --- Optional capability: the pinned-env runner (adapters.base.PinnedEnvCapable). ---
-    # The SECOND runner shape. `run_exploit` above is the hermetic in-process oracle; these
-    # two methods run the anchor's by-path oracle inside the target's pinned Poetry env and
-    # capture the real attack exchange. Both delegate to `_pinned_env`, which is honest by
-    # construction (env absent => `ran=False`, never a fabricated pass or transcript). The
-    # two-runner-shape tension is recorded for ticket 14 on the Protocol.
-
-    def pinned_env_available(self) -> bool:
-        """True only when the vendored target and `poetry` are both present."""
-        return _pinned_env.env_available()
-
-    def run_pinned_exploit(self, finding: Finding) -> PinnedExploitResult:
-        """Run the finding's by-path oracle in the pinned env, capturing the attack
-        exchange. Never raises: a non-anchor finding (no pinned harness yet) or an absent
-        env both return a `ran=False` result."""
-        return _pinned_env.run_pinned_capture(finding)
+    def run_pinned_exploit(
+        self, finding: Finding, prepared: dict[str, Any]
+    ) -> PinnedExploitResult:
+        return _pinned_env.run_pinned_capture(finding, prepared)

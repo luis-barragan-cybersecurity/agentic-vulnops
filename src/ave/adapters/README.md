@@ -21,14 +21,16 @@ in [`base.py`](base.py) as the `LanguagePack` protocol — and v1's single pack 
 - **Optional capability — the pinned-env runner** (`base.PinnedEnvCapable`): a pack *may*
   also run an instance's by-path exploit oracle inside the target's own **pinned
   environment** (for `python_authz`, `target/dvrestaurant/` under Poetry / Python 3.10),
-  verifying a fix against the *real* target and capturing the real attack exchange (request +
-  actual deny) into `prepared_change["attack_exchange"]` for the PR body's opener. It is
-  opt-in per run (`state["use_pinned_env"]`, wired from `AVE_PINNED_ENV`) and honest by
-  construction: `pinned_env_available()` is False when the env is absent, and the runner
-  returns a `ran=False` result rather than a fabricated pass or transcript — so `make check`,
-  which has no target env, is unaffected and the hermetic oracle stays the default. The
-  captured transcript passes three independent fail-closed gates (harness, runner, renderer)
-  before it reaches the public PR body.
+  running the same capture test against the original target and an isolated copy with the
+  generated patch applied. It carries the captured request and responses into
+  `prepared_change["attack_exchange"]` for the PR body's opener. The capability is opt-in
+  per run through `state["use_pinned_env"]`, wired from `AVE_PINNED_ENV`. Every requested
+  run returns a `PinnedExploitResult` whose `status` distinguishes success, unavailable
+  environments, launch failures, patch failures, test failures, malformed output, and
+  unsafe captures. A requested failure leaves T1 red and never falls back to the hermetic
+  oracle. Runs without the opt-in still use the hermetic oracle and omit pinned state. The
+  captured transcript passes three independent fail-closed gates before it reaches the
+  public PR body.
   - **Seam smell for ticket 14:** this makes the exploit-oracle harness carry **two runner
     shapes** — the hermetic in-process `run_exploit`, and this pinned-subprocess runner — and
     the seam does not yet name a Runner strategy; the core picks between them by a capability

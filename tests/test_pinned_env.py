@@ -126,6 +126,21 @@ def _exchange_with(*, request: str | None = None, before: str | None = None) -> 
         _exchange_with(
             before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"cookie":"' + _LEAK + '"}'
         ),
+        _exchange_with(
+            before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"accessToken":"' + _LEAK + '"}'
+        ),
+        _exchange_with(
+            before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"apiKey":"' + _LEAK + '"}'
+        ),
+        _exchange_with(
+            before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"id_token":"' + _LEAK + '"}'
+        ),
+        _exchange_with(
+            before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"client_secret":"' + _LEAK + '"}'
+        ),
+        _exchange_with(
+            before='HTTP/1.1 200 OK\ncontent-type: application/json\n\n{"jwt":"' + _LEAK + '"}'
+        ),
         {"request": "GET / HTTP/1.1"},
         {**_CLEAN_EXCHANGE, "request": "x" * 5000},
     ],
@@ -286,6 +301,25 @@ def test_prepare_fix_patch_applies_to_real_target_file(tmp_path: Path) -> None:
     assert _GET_ORDER.read_text(encoding="utf-8") == original
 
 
+def test_patch_application_rejects_paths_outside_root(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("before\n", encoding="utf-8")
+    patch = (
+        "--- a/../outside.py\n"
+        "+++ b/../outside.py\n"
+        "@@ -1 +1 @@\n"
+        "-before\n"
+        "+after\n"
+    )
+
+    with pytest.raises(ValueError, match="path"):
+        _pinned_env.apply_unified_diff(root, patch)
+
+    assert outside.read_text(encoding="utf-8") == "before\n"
+
+
 def test_harness_executes_current_target_source_not_a_substitute() -> None:
     src = _HARNESS.read_text(encoding="utf-8")
     assert "_fixed_app" not in src
@@ -299,22 +333,63 @@ def test_run_capture_rejects_nonzero_even_if_file_exists(
     def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         path = Path(kwargs["env"]["AVE_CAPTURE_PATH"])
         path.write_text(
-            json.dumps({"status": 200, "attack_exchange": {"request": "GET /", "response": "ok"}}),
+            json.dumps(
+                {
+                    "status": 200,
+                    "attack_exchange": {"request": "GET /", "response": "ok"},
+                }
+            ),
             encoding="utf-8",
         )
         return subprocess.CompletedProcess(argv, 1, _LEAK, _LEAK)
 
     monkeypatch.setattr(_pinned_env.subprocess, "run", fake_run)
-    status, payload = _pinned_env._run_capture(Path("/bin/true"), Path("."), "x.py")
-    assert status == "test_failed"
-    assert payload is None
+    result = _pinned_env._run_capture(Path("/bin/true"), Path("."), "x.py")
+    assert result == {"kind": "failure", "status": "test_failed"}
+
+
+def test_run_capture_drops_inherited_python_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PYTHONHOME", "/wrong/home")
+    monkeypatch.setenv("PYTHONPATH", "/wrong/source")
+    monkeypatch.setenv("VIRTUAL_ENV", "/wrong/venv")
+
+    def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        env = kwargs["env"]
+        assert "PYTHONHOME" not in env
+        assert "PYTHONPATH" not in env
+        assert "VIRTUAL_ENV" not in env
+        path = Path(env["AVE_CAPTURE_PATH"])
+        path.write_text(
+            json.dumps(
+                {
+                    "status": 200,
+                    "attack_exchange": {"request": "GET /", "response": "ok"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(_pinned_env.subprocess, "run", fake_run)
+    result = _pinned_env._run_capture(
+        Path("/target/python"), tmp_path, "capture.py"
+    )
+
+    assert result["kind"] == "success"
+    assert result["payload"]["status"] == 200
 
 
 def test_nonzero_pytest_with_capture_is_test_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: Path("/bin/true"))
-    monkeypatch.setattr(_pinned_env, "_run_capture", lambda *args, **kwargs: ("test_failed", None))
+    monkeypatch.setattr(
+        _pinned_env,
+        "_run_capture",
+        lambda *args, **kwargs: {"kind": "failure", "status": "test_failed"},
+    )
     result = _pinned_env.run_pinned_capture(
         catalog.anchor(), {"patch": "--- a/x\n+++ b/x\n"}
     )

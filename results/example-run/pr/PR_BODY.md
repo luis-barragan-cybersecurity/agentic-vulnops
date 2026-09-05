@@ -5,7 +5,7 @@
 
 ## The attack, and the deny that replaced it
 
-> **Exchange not captured by this run.** The exploit oracle ran through the pack's harness, which records an oracle result but no HTTP request or response. The ladder below shows what this run proved; no transcript is inferred from that result.
+> **Exchange not captured by this run.** No complete, validated HTTP request and response pair is available. The ladder below shows what this run proved; no transcript is inferred.
 
 - Endpoint under attack: `GET /orders/{order_id}`
 - Bound exploit oracle (inverted polarity): `app/tests/vulns/ave_seed_bola_order_read.py::test_bola_cross_customer_order_read` — it *passes* by succeeding at the attack, so a fix must flip it red.
@@ -84,21 +84,30 @@ Cites: policy `1.0.0` · oracle `app/tests/vulns/ave_seed_bola_order_read.py` ·
 <details>
 <summary><b>Patch</b></summary>
 
-> Not an applicable diff. This patch is the in-process model of the fix (`_skeleton_target.py`), which is why its headers name a different file than the finding above.
-
 ```diff
---- a/_skeleton_target.py:get_order
-+++ b/_skeleton_target.py:get_order
-@@ -1,4 +1,6 @@
- def get_order(order_id: int, current_user: str) -> dict[str, Any]:
--    """BOLA: returns the requested object with no ownership check — any authenticated
--    user can read any order."""
--    return _ORDERS[order_id]
-+    """The class-level fix: enforce object ownership before returning the object."""
-+    order = _ORDERS[order_id]
-+    if order["owner"] != current_user:
-+        raise PermissionError("not the owner of this order")
-+    return order
+--- a/target/dvrestaurant/app/apis/orders/services/get_order_service.py
++++ b/target/dvrestaurant/app/apis/orders/services/get_order_service.py
+@@ -1,6 +1,6 @@
+-from apis.auth.utils import RolesBasedAuthChecker
++from apis.auth.utils import RolesBasedAuthChecker, get_current_user
+ from apis.orders import schemas
+-from db.models import Order, UserRole
++from db.models import Order, User, UserRole
+ from db.session import get_db
+ from fastapi import APIRouter, Depends, HTTPException
+ from sqlalchemy.orm import Session
+@@ -13,8 +13,11 @@
+     order_id: int,
+     db: Session = Depends(get_db),
+     auth=Depends(RolesBasedAuthChecker([UserRole.CUSTOMER])),
++    current_user: User = Depends(get_current_user),
+ ):
+     db_order = db.query(Order).filter(Order.id == order_id).first()
+     if db_order is None:
+         raise HTTPException(status_code=404, detail="Order not found")
++    if db_order.user_id != current_user.id:
++        raise HTTPException(status_code=404, detail="Order not found")
+     return db_order
 ```
 
 </details>

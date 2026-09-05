@@ -1,89 +1,181 @@
-"""Pinned-env exploit runner for `python_authz` — the **second runner shape**.
-
-The pack's `run_exploit` (in `pack.py`) is the *hermetic in-process* oracle: two plain
-functions in `_skeleton_target.py`, fast, needing no target environment, driving
-`make check`. This module is the other shape: it runs a selected instance's **by-path
-exploit oracle inside the target's pinned Poetry environment** (`target/dvrestaurant/`,
-Python 3.10 / FastAPI 0.103), so a real fix is verified against the *real* target — real
-router, real DB models, real serialization — and the real **attack exchange** (the request
-and the actual deny) is captured for the PR body's opener.
-
-That the exploit harness now has two runner shapes is a seam smell, recorded on
-`adapters.base.PinnedEnvCapable` for **ticket 14** (seam hardening) to resolve.
-
-Honest by construction. When the pinned env is absent — no `target/dvrestaurant/`, or no
-`poetry` on PATH — `run_pinned_capture` returns a `ran=False` result: never a fabricated
-pass, never a fabricated transcript. `make check` runs with the env absent (this repo's CI
-has no Python-3.10 target env), so the hermetic path stays the default and this module's
-real subprocess path is exercised only where the env exists. The capture itself lives in the
-target tree at `app/tests/vulns/_ave_capture_bola_order_read.py` (AVE-seeded, invoked by
-path, not auto-collected).
-"""
-
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
-import subprocess  # the one subprocess boundary: argv is fixed, never shell
+import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypedDict
 
-from ave.adapters.base import PinnedExploitResult
+from ave.adapters.base import PinnedExploitResult, PinnedStatus
 from ave.state import Finding
 
-# src/ave/adapters/python_authz/_pinned_env.py -> repo root is five parents up.
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _TARGET_DIR = _REPO_ROOT / "target" / "dvrestaurant"
-
-# The by-path capture harness for the loop anchor (I-04), relative to the target dir. It
-# performs the attack against the real app, then the same request against the fix applied as
-# the blessed ownership-check pattern, and writes a redacted transcript to $AVE_CAPTURE_PATH.
 _ANCHOR_CAPTURE = "app/tests/vulns/_ave_capture_bola_order_read.py"
-
-# Bound the subprocess: a pinned-env pytest run should be seconds, not minutes.
 _TIMEOUT_S = 300
+_POETRY_INFO_TIMEOUT_S = 60
 
-# Redaction, mirrored from the renderer's fail-closed validator (`ave.pr`). Two independent
-# gates guard the public artifact: the harness redacts at capture, this redacts what the
-# harness returned, and the renderer redacts again at the boundary. Matched lower-cased.
 _EXCHANGE_FIELDS: tuple[str, ...] = ("request", "before_response", "after_response")
-_FORBIDDEN: tuple[str, ...] = (
-    "```",
-    "authorization:",
-    "cookie:",
-    "set-cookie:",
-    "bearer ",
-    "token=",
-    "session=",
-)
 _MAX_FIELD_LEN = 4000
+_FENCE = "```"
+_SECRET_HEADERS: tuple[str, ...] = ("authorization:", "cookie:", "set-cookie:")
+_BEARER = "bearer "
+_CREDENTIAL_KEYS = {
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "apikey",
+    "clientsecret",
+    "jwt",
+    "password",
+    "secret",
+    "session",
+    "cookie",
+}
+_COPY_SKIP = {
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".git",
+    "postgres_data",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 
 
-def _not_run(detail: str) -> PinnedExploitResult:
-    """The honest skip: the pinned env did not run, so nothing is claimed."""
+_CaptureFailureStatus = Literal["launch_failed", "test_failed", "malformed"]
+
+
+class _CaptureSuccess(TypedDict):
+    kind: Literal["success"]
+    payload: dict[str, Any]
+
+
+class _CaptureFailure(TypedDict):
+    kind: Literal["failure"]
+    status: _CaptureFailureStatus
+
+
+_CaptureResult = _CaptureSuccess | _CaptureFailure
+
+
+def _outcome(
+    status: PinnedStatus,
+    detail: str,
+    *,
+    before_vulnerable: bool | None = None,
+    after_blocked: bool | None = None,
+    flipped: bool | None = None,
+    attack_exchange: dict[str, str] | None = None,
+    patch_applied: bool = False,
+) -> PinnedExploitResult:
     return {
-        "ran": False,
-        "before_vulnerable": None,
-        "after_blocked": None,
-        "flipped": None,
-        "attack_exchange": None,
+        "status": status,
+        "before_vulnerable": before_vulnerable,
+        "after_blocked": after_blocked,
+        "flipped": flipped,
+        "attack_exchange": attack_exchange,
         "detail": detail,
+        "patch_applied": patch_applied,
     }
 
 
-def env_available() -> bool:
-    """True only when the pinned env can actually run: the vendored target is present and
-    `poetry` is on PATH. Anything else is the honest skip."""
-    return _TARGET_DIR.is_dir() and shutil.which("poetry") is not None
+def _resolve_interpreter() -> Path | None:
+    if not _TARGET_DIR.is_dir() or shutil.which("poetry") is None:
+        return None
+    try:
+        proc = subprocess.run(
+            ["poetry", "env", "info", "--executable"],
+            cwd=_TARGET_DIR,
+            capture_output=True,
+            text=True,
+            timeout=_POETRY_INFO_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    path = Path((proc.stdout or "").strip())
+    return path if path.is_file() else None
+
+
+def _has_disallowed_control(value: str) -> bool:
+    return any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value)
+
+
+def _is_credential_key(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", value.lower())
+    return normalized in _CREDENTIAL_KEYS
+
+
+def _query_or_form_credentials(value: str) -> bool:
+    return any(
+        _is_credential_key(match.group(1))
+        for match in re.finditer(r"(?:^|[?&#;\s])([A-Za-z0-9_.-]+)=", value)
+    )
+
+
+def _walk_credential_keys(obj: Any) -> bool:
+    if isinstance(obj, dict):
+        for key, child in obj.items():
+            if _is_credential_key(str(key)):
+                return True
+            if _walk_credential_keys(child):
+                return True
+        return False
+    if isinstance(obj, list):
+        return any(_walk_credential_keys(item) for item in obj)
+    return False
+
+
+def _json_credential_fields(value: str) -> bool:
+    if any(
+        _is_credential_key(match.group(1))
+        for match in re.finditer(r'"([^"]+)"\s*:', value)
+    ):
+        return True
+    candidates = [value]
+    parts = re.split(r"\r?\n\r?\n", value, maxsplit=1)
+    if len(parts) == 2:
+        candidates.append(parts[1])
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if _walk_credential_keys(parsed):
+            return True
+    return False
+
+
+def _field_is_unsafe(value: str) -> bool:
+    if _has_disallowed_control(value):
+        return True
+    lowered = value.lower()
+    if _FENCE in value:
+        return True
+    if any(header in lowered for header in _SECRET_HEADERS):
+        return True
+    if _BEARER in lowered:
+        return True
+    if _query_or_form_credentials(value):
+        return True
+    return _json_credential_fields(value)
 
 
 def sanitized_exchange(raw: Any) -> dict[str, str] | None:
-    """Return the captured exchange only if safe to carry forward, else None. Fail-closed:
-    each of the three fields must be a non-empty string within a length cap, free of control
-    characters (beyond CR/LF/TAB) and of any forbidden substring (a fence, or a
-    secret-bearing header/token). One failure rejects the whole exchange."""
+    """Return the captured exchange only if safe to carry forward, else None.
+
+    Fail-closed at this boundary: each of the three fields must be a non-empty string
+    within a length cap, free of fences, disallowed control characters, secret-bearing
+    headers, bearer values, query/form credential keys, and structured JSON credential
+    fields. One failure withholds the whole exchange. The rejected value is not returned.
+    """
     if not isinstance(raw, dict):
         return None
     cleaned: dict[str, str] = {}
@@ -94,18 +186,92 @@ def sanitized_exchange(raw: Any) -> dict[str, str] | None:
         stripped = value.strip("\n")
         if not stripped.strip() or len(value) > _MAX_FIELD_LEN:
             return None
-        if any(ord(ch) < 32 and ch not in "\r\n\t" for ch in value):
-            return None
-        if any(bad in value.lower() for bad in _FORBIDDEN):
+        if _field_is_unsafe(value):
             return None
         cleaned[key] = stripped
     return cleaned
 
 
+def apply_unified_diff(root: Path, patch_text: str) -> Path:
+    if not patch_text.strip():
+        raise ValueError("empty patch")
+    rel: str | None = None
+    hunks: list[tuple[int, list[str]]] = []
+    lines = patch_text.splitlines(keepends=True)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("--- "):
+            rel = line[4:].split("\t", 1)[0].strip().removeprefix("a/")
+            i += 1
+            continue
+        if line.startswith("+++ "):
+            i += 1
+            continue
+        if line.startswith("@@ "):
+            match = re.match(r"@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@", line)
+            if match is None:
+                raise ValueError("malformed hunk header")
+            old_start = int(match.group(1))
+            body: list[str] = []
+            i += 1
+            while i < len(lines) and lines[i][:1] in {" ", "+", "-", "\\"}:
+                if not lines[i].startswith("\\"):
+                    body.append(lines[i])
+                i += 1
+            hunks.append((old_start, body))
+            continue
+        i += 1
+    if not rel:
+        raise ValueError("patch names no file")
+    relative = Path(rel)
+    resolved_root = root.resolve()
+    path = (resolved_root / relative).resolve()
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or not path.is_relative_to(resolved_root)
+    ):
+        raise ValueError("patch path escapes root")
+    original = path.read_text(encoding="utf-8")
+    source = original.splitlines(keepends=True)
+    out: list[str] = []
+    cursor = 0
+    for old_start, body in hunks:
+        target = max(old_start - 1, 0)
+        if target < cursor:
+            raise ValueError("hunk overlap")
+        out.extend(source[cursor:target])
+        cursor = target
+        for raw in body:
+            tag, rest = raw[:1], raw[1:]
+            if tag == " ":
+                if cursor >= len(source) or source[cursor] != rest:
+                    raise ValueError("patch context does not match")
+                out.append(source[cursor])
+                cursor += 1
+            elif tag == "-":
+                if cursor >= len(source) or source[cursor] != rest:
+                    raise ValueError("patch removal does not match")
+                cursor += 1
+            elif tag == "+":
+                out.append(rest)
+            else:
+                raise ValueError("malformed hunk line")
+    out.extend(source[cursor:])
+    rewritten = "".join(out)
+    if rewritten == original:
+        raise ValueError("patch applied with no change")
+    path.write_text(rewritten, encoding="utf-8")
+    return path
+
+
+def _patch_proved(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8")
+    return "current_user" in text and "current_user.id" in text and "user_id" in text
+
+
 def _capture_target(finding: Finding) -> str | None:
-    """The by-path capture harness for this instance, or None if the pack has no pinned
-    harness for it. v1 ships the anchor's harness only; other instances resolve as the
-    frontier advances (find-stage / seam hardening)."""
     is_anchor = bool(
         isinstance(finding.get("evidence"), dict)
         and finding["evidence"].get("is_loop_anchor")
@@ -113,74 +279,147 @@ def _capture_target(finding: Finding) -> str | None:
     return _ANCHOR_CAPTURE if is_anchor else None
 
 
-def _interpret(payload: dict[str, Any]) -> PinnedExploitResult:
-    """Turn the harness's JSON payload into a `PinnedExploitResult`. The harness reports the
-    two response statuses it observed against the real target; `flipped` is the pinned T1
-    signal (attack succeeded before the fix, denied after)."""
-    before_status = payload.get("before_status")
-    after_status = payload.get("after_status")
+def _flip(
+    before_status: Any, after_status: Any
+) -> tuple[bool, bool, bool]:
     before_vulnerable = before_status == 200
     after_blocked = isinstance(after_status, int) and after_status in (403, 404)
-    exchange = sanitized_exchange(payload.get("attack_exchange"))
-    detail = (
-        f"pinned env ran: before={before_status} after={after_status}; "
-        f"exchange={'captured' if exchange else 'withheld (failed redaction gate)'}"
+    return before_vulnerable, after_blocked, before_vulnerable and after_blocked
+
+
+def _interpret(payload: dict[str, Any]) -> PinnedExploitResult:
+    before_vulnerable, after_blocked, flipped = _flip(
+        payload.get("before_status"), payload.get("after_status")
     )
-    return {
-        "ran": True,
-        "before_vulnerable": before_vulnerable,
-        "after_blocked": after_blocked,
-        "flipped": before_vulnerable and after_blocked,
-        "attack_exchange": exchange,
-        "detail": detail,
-    }
-
-
-def run_pinned_capture(finding: Finding) -> PinnedExploitResult:
-    """Run the finding's by-path capture harness in the target's pinned Poetry env and
-    return a structured result. Never raises: env absent, no harness, a non-zero pytest
-    exit, a timeout, or unreadable output each yield a `ran=False` result, so the caller can
-    trust the `ran` flag and fall back to the hermetic oracle."""
-    if not env_available():
-        return _not_run(
-            "pinned env absent (no target/dvrestaurant or no poetry on PATH); "
-            "hermetic in-process oracle used instead"
+    exchange = sanitized_exchange(payload.get("attack_exchange"))
+    if exchange is None:
+        return _outcome(
+            "unsafe_capture",
+            "captured exchange failed the redaction gate",
+            before_vulnerable=before_vulnerable,
+            after_blocked=after_blocked,
+            flipped=False,
+            patch_applied=True,
         )
-    capture_rel = _capture_target(finding)
-    if capture_rel is None:
-        return _not_run(
-            f"no pinned capture harness for {finding.get('id')} "
-            f"(v1 ships the loop anchor's harness only)"
-        )
+    return _outcome(
+        "success",
+        (
+            f"pinned env ran: before={payload.get('before_status')} "
+            f"after={payload.get('after_status')}"
+        ),
+        before_vulnerable=before_vulnerable,
+        after_blocked=after_blocked,
+        flipped=flipped,
+        attack_exchange=exchange,
+        patch_applied=True,
+    )
 
+
+def _copy_ignore(_directory: str, names: list[str]) -> list[str]:
+    return [name for name in names if name in _COPY_SKIP or name.endswith(".pyc")]
+
+
+def _run_capture(
+    interpreter: Path, cwd: Path, capture_rel: str
+) -> _CaptureResult:
     with tempfile.TemporaryDirectory() as tmp:
         out_path = Path(tmp) / "exchange.json"
-        env = {**os.environ, "AVE_CAPTURE_PATH": str(out_path)}
-        argv = ["poetry", "run", "pytest", capture_rel, "-q", "-p", "no:cacheprovider"]
+        env = {**os.environ, "AVE_CAPTURE_PATH": str(out_path), "PYTHONDONTWRITEBYTECODE": "1"}
+        for inherited_path in ("PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV"):
+            env.pop(inherited_path, None)
+        argv = [
+            str(interpreter),
+            "-m",
+            "pytest",
+            capture_rel,
+            "-q",
+            "-p",
+            "no:cacheprovider",
+        ]
         try:
-            proc = subprocess.run(  # fixed argv, no shell, trusted target dir
+            proc = subprocess.run(
                 argv,
-                cwd=_TARGET_DIR,
+                cwd=cwd,
                 env=env,
                 capture_output=True,
                 text=True,
                 timeout=_TIMEOUT_S,
                 check=False,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return _not_run(f"pinned env failed to launch: {exc}")
-
+        except (OSError, subprocess.SubprocessError):
+            return {"kind": "failure", "status": "launch_failed"}
+        if proc.returncode != 0:
+            return {"kind": "failure", "status": "test_failed"}
         if not out_path.exists():
-            tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
-            return _not_run(
-                "pinned env ran but wrote no capture "
-                f"(pytest exit {proc.returncode}): {' | '.join(tail)}"
-            )
+            return {"kind": "failure", "status": "malformed"}
         try:
-            payload = json.loads(out_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            return _not_run(f"pinned env wrote an unreadable capture: {exc}")
+            payload: Any = json.loads(out_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {"kind": "failure", "status": "malformed"}
+    if not isinstance(payload, dict) or not isinstance(payload.get("status"), int):
+        return {"kind": "failure", "status": "malformed"}
+    return {"kind": "success", "payload": payload}
 
-    if not isinstance(payload, dict):
-        return _not_run("pinned env capture was not a JSON object")
-    return _interpret(payload)
+
+def _combine(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    before_ex = before.get("attack_exchange")
+    after_ex = after.get("attack_exchange")
+    before_map = before_ex if isinstance(before_ex, dict) else {}
+    after_map = after_ex if isinstance(after_ex, dict) else {}
+    request = before_map.get("request") or after_map.get("request")
+    return {
+        "before_status": before.get("status"),
+        "after_status": after.get("status"),
+        "attack_exchange": {
+            "request": request,
+            "before_response": before_map.get("response") or before_map.get("before_response"),
+            "after_response": after_map.get("response") or after_map.get("after_response"),
+        },
+    }
+
+
+def _run_patched_capture(
+    interpreter: Path,
+    capture_rel: str,
+    patch: str,
+    before_payload: dict[str, Any],
+) -> PinnedExploitResult:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo_root = Path(tmp)
+        copy_root = repo_root / "target" / "dvrestaurant"
+        try:
+            shutil.copytree(_TARGET_DIR, copy_root, ignore=_copy_ignore)
+            patched = apply_unified_diff(repo_root, patch)
+        except (OSError, ValueError):
+            return _outcome("patch_failed", "generated patch did not apply")
+        if not _patch_proved(patched):
+            return _outcome("patch_failed", "generated patch did not apply")
+        after = _run_capture(interpreter, copy_root, capture_rel)
+        if after["kind"] == "failure":
+            status = after["status"]
+            return _outcome(
+                status,
+                f"pinned {status.replace('_', ' ')}",
+                patch_applied=True,
+            )
+        return _interpret(_combine(before_payload, after["payload"]))
+
+
+def run_pinned_capture(
+    finding: Finding, prepared: dict[str, Any] | None = None
+) -> PinnedExploitResult:
+    interpreter = _resolve_interpreter()
+    if interpreter is None:
+        return _outcome("unavailable", "pinned environment is not available")
+    capture_rel = _capture_target(finding)
+    if capture_rel is None:
+        return _outcome("unavailable", "no pinned capture harness for this finding")
+    patch = (prepared or {}).get("patch")
+    if not isinstance(patch, str) or not patch.strip():
+        return _outcome("patch_failed", "generated patch is missing")
+
+    before = _run_capture(interpreter, _TARGET_DIR, capture_rel)
+    if before["kind"] == "failure":
+        status = before["status"]
+        return _outcome(status, f"pinned {status.replace('_', ' ')}")
+    return _run_patched_capture(interpreter, capture_rel, patch, before["payload"])

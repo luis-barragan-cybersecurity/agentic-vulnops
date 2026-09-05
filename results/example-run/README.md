@@ -13,8 +13,8 @@ to merge.
   product"), in the shape ticket 06 locked: attack exchange, ladder table, the four
   blast-radius blocks, decision record collapsed. It doubles as the golden file
   `tests/test_pr_body.py` renders against, so it is provably what the code emits.
-- [`pr/fix.patch`](pr/fix.patch) — the class-level ownership diff (the in-process model's
-  patch; its caveat in the body says exactly what it stands for).
+- [`pr/fix.patch`](pr/fix.patch) — the applicable ownership diff for
+  `target/dvrestaurant/app/apis/orders/services/get_order_service.py`.
 
 First committed at ticket 03 as the walking skeleton's first pass (that verbatim record
 is in git history); regenerated at ticket 09 with the landed governance schemas

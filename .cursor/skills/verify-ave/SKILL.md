@@ -5,7 +5,7 @@ description: Drive AVE from the CLI and Makefile. Use when proving ave/make run,
 
 # Verify AVE
 
-AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The graph, interrupt, and CI wiring are real. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` drives the in-process I-04 oracle and writes a local PR bundle under `results/runs/<id>/`. `AVE_PINNED_ENV=1` can instead run an I-04 capture test in the target's Poetry environment. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
+AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The graph, interrupt, and CI wiring are real. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` drives the in-process I-04 oracle and writes a local PR bundle under `results/runs/<id>/`. `AVE_PINNED_ENV=1` runs the I-04 capture test against the vendored target and an isolated copy with AVE's generated patch applied, both through the target's Poetry interpreter. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
 
 The next agent to read this has never seen the app. Commands below are literal.
 
@@ -68,8 +68,8 @@ Stable handles:
 - Invariant line `invariant: OK (no run records to validate yet)` (CLI still does not load `results/runs/`)
 - Pause pytest node `tests/test_graph_smoke.py::test_run_halts_at_the_hitl_gate_before_approval`
 - Resume pytest node `tests/test_walking_skeleton.py::test_loop_runs_end_to_end_and_produces_a_pr`
-- PR-body contract node `tests/test_pr_body.py` (17 tests; golden comparison normalizes only run IDs and timestamps)
-- Pinned-run contract node `tests/test_pinned_env.py` (18 tests)
+- PR-body contract node `tests/test_pr_body.py` (18 tests; golden comparison normalizes only run IDs and timestamps)
+- Pinned-run contract node `tests/test_pinned_env.py` (47 tests)
 - Pinned opt-in environment variable `AVE_PINNED_ENV`
 - Baseline heading `AVE role-pattern Semgrep baseline — score vs target catalog`
 - Baseline class-aware BOLA line `BOLA  recall : 0%  (0/4)`
@@ -94,7 +94,8 @@ Proof standards:
 - Capture the command, stdout, stderr, and exit code. For `run` and `eradicate`, the four summary lines are the user-visible result. The OTel JSON blob is a side effect of tracing, not the product.
 - Check side effects, not slogans. `break` prints that the catalog is already seeded and writes nothing under `target/`. `scoreboard` prints a ticket-05 stub and does not edit the README. `run` / `eradicate` write gitignored files under `results/runs/<id>/`. Confirm `git -C <repo> status --porcelain -- README.md target` stays empty.
 - The generated PR body is a product artifact. Inspect the path printed by `run`; only T1 is green and readiness is `no`. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison.
-- An accepted pinned capture has `pinned_ran: true` and `attack_exchange_captured: true` in the Prepare span, plus `t1_runner: pinned` in Verify. Those fields prove that AVE interpreted the capture, not that the inner pytest process exited 0. The after-response comes from the capture test's substitute fixed route. The command does not apply the generated patch to the vendored target. A failed pinned attempt has `pinned_ran: false` or no pinned fields in Prepare and `t1_runner: hermetic` in Verify.
+- An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE ran the same capture test against the original target and an isolated copy after applying the generated patch. The tracked target remains unchanged.
+- A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.
 - `make baseline` is a separate pattern-scanner comparator. It may run live Semgrep and refresh `semgrep-findings.json`, or replay that committed file when Semgrep is unavailable; both paths rewrite `results.json`. Record the source line and pre-drive status of `evals/baseline/semgrep/`.
 - `python -m ave.invariant --check` still prints the vacuous OK even after live runs have written records. Record the exact stdout. Do not report it as "the invariant held over run records."
 - `make eval` (promptfoo) is a secondary surface. It is not in the first feature map. Skip it unless you are extending the map. It needs network for `npx`.
