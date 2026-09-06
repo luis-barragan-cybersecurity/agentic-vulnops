@@ -1,0 +1,286 @@
+"""Many findings in, one remediated out (ticket 24).
+
+Guards the run shape the find-stage design fixed: every finding names its source, findings
+from different sources that name the same flaw merge into one keeping both sources, a
+thin *stated* rank function picks the head and says why, and every ingested finding gets
+an honest lifecycle in the run record. The end-to-end run still ingests exactly one
+finding (the pack claims only the loop anchor, ticket 04's honesty fix), so multiplicity is
+proven here with synthetic multi-source findings; real multiplicity arrives with the LLM
+finder.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any, cast
+
+from ave.adapters import LanguagePack, get_default_pack
+from ave.adapters.python_authz import catalog
+from ave.findings import (
+    RANK_FUNCTION,
+    UNATTRIBUTED_SOURCE,
+    all_sources,
+    attribute,
+    merge_findings,
+    rank_findings,
+    select_head,
+)
+from ave.policy import policy_version
+from ave.pr import render_pr_body
+from ave.records.store import build_run_record
+from ave.runner import run_once
+from ave.state import AVEState, Finding
+
+_INITIAL: AVEState = {
+    "target_ref": "target/dvrestaurant@d32d0997",
+    "policy_version": policy_version(),
+}
+
+
+def _finding(
+    id_: str,
+    *,
+    location: str = "app/x.py:handler",
+    kind: str = "object-ownership-gap",
+    confidence: float = 0.5,
+    source: str | None = "ave:test",
+    **extra: Any,
+) -> Finding:
+    finding: dict[str, Any] = {
+        "id": id_,
+        "kind": kind,
+        "location": location,
+        "confidence": confidence,
+        "evidence": {},
+        **extra,
+    }
+    if source is not None:
+        finding["source"] = source
+    return cast("Finding", finding)
+
+
+def _by_location(finding: Finding) -> str:
+    return str(finding.get("location", ""))
+
+
+# --- attribution -------------------------------------------------------------------------
+
+
+def test_attribute_backfills_a_missing_source_and_leaves_set_ones_alone() -> None:
+    out = attribute(
+        [_finding("a", source=None), _finding("b", source="sarif:tool")],
+        default_source="ave:backfill",
+    )
+    assert [f["source"] for f in out] == ["ave:backfill", "sarif:tool"]
+
+
+def test_unattributed_is_a_named_value_not_a_blank() -> None:
+    assert UNATTRIBUTED_SOURCE
+    assert all_sources(_finding("a", source=None)) == [UNATTRIBUTED_SOURCE]
+
+
+def test_all_sources_lists_the_primary_first_then_corroborators_sorted() -> None:
+    f = _finding("a", source="ave:llm", corroborated_by=["sarif:z", "sarif:b", "ave:llm"])
+    assert all_sources(f) == ["ave:llm", "sarif:b", "sarif:z"]
+
+
+# --- de-dup merge ------------------------------------------------------------------------
+
+
+def test_same_location_and_kind_from_two_sources_merge_keeping_both_sources() -> None:
+    llm = _finding("llm-1", confidence=0.9, source="ave:llm")
+    sarif = _finding("sarif-1", confidence=0.6, source="sarif:tool")
+    merged = merge_findings([sarif, llm], location_key=_by_location)
+    assert len(merged) == 1
+    head = merged[0]
+    assert head["id"] == "llm-1"  # the higher confidence wins
+    assert head["confidence"] == 0.9
+    assert all_sources(head) == ["ave:llm", "sarif:tool"]
+
+
+def test_confidence_tie_goes_to_the_first_seen() -> None:
+    first = _finding("first", confidence=0.7, source="sarif:a")
+    second = _finding("second", confidence=0.7, source="sarif:b")
+    merged = merge_findings([first, second], location_key=_by_location)
+    assert [f["id"] for f in merged] == ["first"]
+    assert merged[0]["corroborated_by"] == ["sarif:b"]
+
+
+def test_same_location_different_kind_does_not_merge() -> None:
+    bola = _finding("a", kind="object-ownership-gap")
+    bfla = _finding("b", kind="function-role-gap")
+    assert len(merge_findings([bola, bfla], location_key=_by_location)) == 2
+
+
+def test_merge_preserves_ingest_order_and_folds_transitively() -> None:
+    a = _finding("a", location="f.py:one", confidence=0.5, source="s1")
+    b = _finding("b", location="f.py:two", confidence=0.5, source="s2")
+    a2 = _finding("a2", location="f.py:one", confidence=0.8, source="s3")
+    a3 = _finding("a3", location="f.py:one", confidence=0.1, source="s4")
+    merged = merge_findings([a, b, a2, a3], location_key=_by_location)
+    assert [f["id"] for f in merged] == ["a2", "b"]
+    assert all_sources(merged[0]) == ["s3", "s1", "s4"]
+
+
+# --- the pack-owned key ------------------------------------------------------------------
+
+
+def test_dedup_key_is_on_the_seam_and_the_default_pack_still_satisfies_it() -> None:
+    pack = get_default_pack()
+    assert isinstance(pack, LanguagePack)
+    assert hasattr(pack, "dedup_key")
+
+
+def test_pack_dedup_key_reads_file_and_symbol() -> None:
+    pack = get_default_pack()
+    key = pack.dedup_key(_finding("a", location="app/apis/orders/get.py:get_order"))
+    assert key == "app/apis/orders/get.py:get_order"
+
+
+def test_pack_dedup_key_fails_toward_not_merging_on_a_line_location() -> None:
+    """A `file:line` location (what a SARIF feed reports) is not a symbol; resolving a
+    line to its enclosing symbol is intake work. Until then the raw location is the key,
+    so a duplicate survives visibly rather than a source being silently dropped."""
+    pack = get_default_pack()
+    by_symbol = _finding("a", location="app/x.py:handler")
+    by_line = _finding("b", location="app/x.py:42")
+    assert pack.dedup_key(by_line) == "app/x.py:42"
+    assert pack.dedup_key(by_line) != pack.dedup_key(by_symbol)
+    assert pack.dedup_key(_finding("c", location="no-colon-here")) == "no-colon-here"
+    assert len(merge_findings([by_symbol, by_line], location_key=pack.dedup_key)) == 2
+
+
+# --- ranked head selection ---------------------------------------------------------------
+
+
+def test_rank_function_is_stated_as_text() -> None:
+    assert "confidence" in RANK_FUNCTION and "dependents" in RANK_FUNCTION
+
+
+def test_rank_orders_confidence_desc_first() -> None:
+    low = _finding("low", confidence=0.2, location="a.py:x")
+    high = _finding("high", confidence=0.9, location="z.py:x")
+    assert [f["id"] for f in rank_findings([low, high])] == ["high", "low"]
+
+
+def test_rank_prefers_fewer_measured_dependents_and_puts_unmeasured_last() -> None:
+    wide = _finding("wide", location="a.py:x")
+    narrow = _finding("narrow", location="b.py:x")
+    unknown = _finding("unknown", location="c.py:x")
+    ranked = rank_findings(
+        [unknown, wide, narrow], dependents={"wide": 12, "narrow": 2, "unknown": None}
+    )
+    assert [f["id"] for f in ranked] == ["narrow", "wide", "unknown"]
+
+
+def test_rank_breaks_remaining_ties_on_location_then_ingest_order() -> None:
+    z = _finding("z", location="z.py:x")
+    a2 = _finding("a2", location="a.py:x")
+    a1 = _finding("a1", location="a.py:x")
+    assert [f["id"] for f in rank_findings([z, a2, a1])] == ["a2", "a1", "z"]
+
+
+def test_select_head_states_its_rationale() -> None:
+    head, rationale = select_head(
+        [_finding("b", confidence=0.4), _finding("a", confidence=0.8, location="q.py:h")]
+    )
+    assert head is not None and head["id"] == "a"
+    assert rationale["rank_function"] == RANK_FUNCTION
+    assert rationale["candidates"] == 2
+    assert rationale["dependents_measured"] == 0
+    assert rationale["selected"] == "a"
+    assert "confidence" in rationale["why"]
+    assert [r["id"] for r in rationale["ranking"]] == ["a", "b"]
+
+
+def test_select_head_on_nothing_is_honest() -> None:
+    head, rationale = select_head([])
+    assert head is None
+    assert rationale["candidates"] == 0 and rationale["selected"] is None
+
+
+# --- honesty: the answer key never reaches the product path -------------------------------
+
+
+def test_anchor_and_ground_truth_carry_different_sources() -> None:
+    assert catalog.anchor()["source"] == catalog.ANCHOR_SOURCE
+    assert all(f["source"] == catalog.GROUND_TRUTH_SOURCE for f in catalog.ground_truth())
+    assert catalog.ANCHOR_SOURCE != catalog.GROUND_TRUTH_SOURCE
+
+
+def test_no_run_finding_ever_carries_the_ground_truth_source() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    for finding in final["findings"]:
+        assert catalog.GROUND_TRUTH_SOURCE not in all_sources(finding)
+
+
+# --- the run shape end to end ------------------------------------------------------------
+
+
+def test_run_ingests_one_attributed_finding_and_records_why_it_was_selected() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    assert len(final["findings"]) == 1  # the pack still claims only the loop anchor
+    assert final["findings"][0]["source"] == catalog.ANCHOR_SOURCE
+    rationale = final["selection_rationale"]
+    assert rationale["candidates"] == 1
+    assert rationale["selected"] == "I-04"
+    assert rationale["dependents_measured"] == 0
+    match = next(s for s in final["spans"] if s["phase"] == "match")
+    assert match["attributes"]["found"] == 1
+    assert match["attributes"]["ingested"] == 1
+    assert match["attributes"]["sources"] == [catalog.ANCHOR_SOURCE]
+    assess = next(s for s in final["spans"] if s["phase"] == "assess")
+    assert assess["attributes"]["selection"]["rank_function"] == RANK_FUNCTION
+
+
+def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    spans = final["spans"]
+    state: AVEState = cast(
+        "AVEState",
+        {
+            **final,
+            "findings": [
+                *final["findings"],
+                _finding("X-1", location="app/a.py:one", source="sarif:tool"),
+                _finding("X-2", location="app/b.py:two", source="ave:llm"),
+            ],
+            "spans": spans,
+        },
+    )
+    record = build_run_record(state)
+    by_id = {lc.finding_id: lc for lc in record.findings}
+    assert set(by_id) == {"I-04", "X-1", "X-2"}
+    assert by_id["I-04"].triaged_at is not None
+    for other in ("X-1", "X-2"):
+        assert by_id[other].outcome == "open"
+        assert by_id[other].triaged_at is None
+        assert by_id[other].verified_at is None
+        assert by_id[other].first_observed_at == by_id["I-04"].first_observed_at
+    json.dumps(record.findings[0].__dict__)  # serialisable, like the persisted record
+
+
+def test_pr_body_says_which_of_many_was_selected_and_lists_the_rest_still_open() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    others = [
+        _finding("X-1", location="app/a.py:one", source="sarif:tool"),
+        _finding("X-2", location="app/b.py:two", source="ave:llm", corroborated_by=["sarif:tool"]),
+    ]
+    findings = [*final["findings"], *others]
+    head, rationale = select_head(findings)
+    assert head is not None and head["id"] == "I-04"
+    state = cast(
+        "AVEState", {**final, "findings": findings, "selection_rationale": rationale}
+    )
+    body = render_pr_body(state)
+    assert "**Selected** 1 of 3 ingested findings" in body
+    assert RANK_FUNCTION in body
+    still_open = body[body.find("### Still open") : body.find("### Cleared")]
+    assert "`X-1`" in still_open and "`sarif:tool`" in still_open
+    assert "`X-2`" in still_open and "`ave:llm`" in still_open
+
+
+def test_golden_pr_body_states_the_single_ingested_finding_honestly() -> None:
+    body = render_pr_body(run_once(_INITIAL, auto_approve=True))
+    assert "**Selected** 1 of 1 ingested finding" in body
+    assert f"found by `{catalog.ANCHOR_SOURCE}`" in body

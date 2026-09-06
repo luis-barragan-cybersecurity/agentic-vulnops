@@ -18,7 +18,12 @@ hermetic in-process model for T1. It does not execute the generated patch.
 
 First committed at ticket 03 as the walking skeleton's first pass (that verbatim record
 is in git history); regenerated at ticket 09 with the landed governance schemas
-(policy `1.0.0`, per-finding lifecycle) and the locked PR-body template.
+(policy `1.0.0`, per-finding lifecycle) and the locked PR-body template; regenerated again
+at ticket 24 with the many-findings run shape — every finding carries `source`, the Match
+span records what was ingested and from where, the Assess span records the stated rank
+function and why the head was selected, and the PR body says "Selected 1 of N". This run
+still ingests exactly **one** finding: the pack claims only the loop anchor, so N is 1 and
+the machinery is proven by tests on synthetic multi-source findings.
 
 ## What this is *not*
 
