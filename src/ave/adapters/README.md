@@ -3,12 +3,20 @@
 The stable interface a per-language adapter plugs into. The seam is now **real** — defined
 in [`base.py`](base.py) as the `LanguagePack` protocol — and v1's single pack is landed.
 
-- **The seam** (`base.LanguagePack`): a pack supplies five capabilities — finding sources
-  (`find`), blast-radius extraction (`blast_radius`), a proposed remediation surface the
-  policy is judged over (`fix_plan`), fix templates that realize it as a patch
-  (`prepare_fix`), and an exploit-oracle harness (`run_exploit` + `legitimate_use_holds`,
-  inverted polarity). `fix_plan` is the Decide-time proposal; `prepare_fix` the Prepare-time
-  realization.
+- **The seam** (`base.LanguagePack`): a pack supplies six capabilities — finding sources
+  (`find`), the de-dup location key (`dedup_key`), blast-radius extraction
+  (`blast_radius`), a proposed remediation surface the policy is judged over (`fix_plan`),
+  fix templates that realize it as a patch (`prepare_fix`), and an exploit-oracle harness
+  (`run_exploit` + `legitimate_use_holds`, inverted polarity). `fix_plan` is the Decide-time
+  proposal; `prepare_fix` the Prepare-time realization.
+- **De-dup is split across the seam on purpose.** `dedup_key(finding)` is the pack's half:
+  read its own `location` into a stable `file:symbol` (never `file:line` — lines drift). The
+  neutral half — group on `(dedup_key, kind)`, keep the higher confidence, fold the losers'
+  sources into `corroborated_by` — lives once in `ave.findings`, so a second pack does not
+  re-implement the merge. A pack must fail toward *not* merging: a location it cannot
+  resolve to a symbol comes back as-is and the duplicate stays visible. Every finding
+  carries `source` (`ave:<finder>` / `sarif:<tool>`); the core stamps `unattributed` on any
+  that does not, and the scoreboard counts recall per source.
 - **v1's pack** (`python_authz/`): Python/FastAPI, BOLA/BFLA. Landed by the walking skeleton
   (ticket 03); ticket 04 pointed it at the real vendored target (`target/catalog.json`,
   8 authorization instances + decoys, each bound to a by-path exploit oracle). `find()`

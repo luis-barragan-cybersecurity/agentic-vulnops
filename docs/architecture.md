@@ -16,8 +16,8 @@ flowchart LR
 | Phase | Responsibility | Seam call |
 |-------|----------------|-----------|
 | **Intake** | Pin the target ref + policy version; open the run record. | — |
-| **Match** | `find()` emits the catalog anchor (`I-04`) as a `Finding`. | `find()` |
-| **Assess** | Measure reach, propose a fix, select `findings[0]` to drive. | `blast_radius()`, `fix_plan()` |
+| **Match** | Fan-in over every finding source: attribute each `Finding` with its `source`, then merge findings from different sources that name the same flaw on `(dedup_key, kind)`, keeping both sources and the higher confidence (`ave.findings`). Today the pack's `find()` is the only source and emits the catalog anchor (`I-04`), so a run ingests exactly one. | `find()`, `dedup_key()` |
+| **Assess** | Rank the batch by the stated function (confidence desc → measured dependents asc → location asc), select the head to drive, record the rationale in state and in the span; measure reach, propose a fix. Every other ingested finding stays `open` in the run record. | `blast_radius()`, `fix_plan()` |
 | **Decide** | Evaluate the proposed remediation against `policy.yaml` with the pure `decide()`; produce the two-part decision record citing the policy version. | — |
 | **HITL gate** | `interrupt()` before Prepare. Structural, never a prompt. `ave run` auto-approves. A paused run has no `pr_ref`. | — |
 | **Prepare** | `prepare_fix()` builds an in-process `PreparedFix`. `pr_ref` stays unset. | `prepare_fix()` |
