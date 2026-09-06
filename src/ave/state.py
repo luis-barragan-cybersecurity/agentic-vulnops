@@ -21,6 +21,13 @@ class Finding(TypedDict, total=False):
     kind: str  # neutral label supplied by the adapter (e.g. an ownership-check gap)
     location: str  # file:symbol or route, as the adapter reports it
     confidence: float
+    # Which finding source produced this: `ave:<finder>` for AVE's own, `sarif:<tool>` for
+    # an external feed. Always set by Match, because the scoreboard reports recall *per
+    # source* — an external scanner's findings must never silently inflate AVE's own
+    # number. `corroborated_by` holds the other sources a de-dup merge folded in, so a
+    # flaw two sources agree on keeps both without losing which one led.
+    source: str
+    corroborated_by: list[str]
     evidence: dict[str, Any]  # opaque, adapter-interpreted
 
 
@@ -70,6 +77,7 @@ class AVEState(TypedDict, total=False):
     # Match / Assess
     findings: list[Finding]
     selected_finding: Finding | None
+    selection_rationale: dict[str, Any]  # why *this* finding is the one remediated
     assessment: dict[str, Any]
 
     # Decide (+ HITL gate)
