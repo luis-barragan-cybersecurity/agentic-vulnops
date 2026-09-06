@@ -42,7 +42,22 @@ class LanguagePack(Protocol):
     name: str
 
     def find(self, target_ref: str) -> list[Finding]:
-        """Surface candidate findings from the target. Neutral `Finding` records only."""
+        """Surface candidate findings from the target. Neutral `Finding` records only.
+        Every finding should carry `source`; the core stamps `unattributed` on any that
+        does not, so the omission is visible rather than blank."""
+        ...
+
+    def dedup_key(self, finding: Finding) -> str:
+        """The stable location identity two findings must share to be the same flaw —
+        `file:symbol`, never `file:line` (lines drift between runs and sources).
+
+        This is the pack's half of de-dup: only the pack knows how to read its own
+        `location` into a file and an enclosing symbol. The other half — grouping on
+        `(dedup_key, kind)`, keeping the higher confidence, folding the losers' sources
+        into `corroborated_by` — is language-neutral and lives once in `ave.findings`,
+        so a second pack inherits it. **Fail toward not merging:** a location the pack
+        cannot resolve to a symbol must come back as-is, so a surviving duplicate is
+        visible and honest rather than a source silently dropped by a wrong merge."""
         ...
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
