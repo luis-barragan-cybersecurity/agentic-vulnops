@@ -1,22 +1,45 @@
 """Phase 2 — Match.
 
-Surface candidate findings from the target via the language pack. The pack fans in rule
-and model findings behind the adapter seam; the core only ever sees neutral `Finding`
-records. Skeleton: the pack declares one finding, the loop anchor it can drive end to end.
-The target catalogue's remaining instances are ground truth for scoring, not pack output.
+The fan-in point for every finding source a run consults. Each source's findings are
+attributed (`source` is never blank), then findings from different sources that name the
+same flaw are merged on the pack's `(file, symbol)` key plus `kind`, keeping both sources
+and the higher confidence. The core only ever sees neutral `Finding` records.
+
+Sources today: whatever Intake already placed in `state["findings"]` (nothing yet — an
+external SARIF feed lands there when intake grows one) and the pack's own `find()`, which
+still declares only the loop anchor (ticket 04's honesty fix), so a run still ingests
+exactly one finding. Many findings in, one remediated out: Assess ranks this batch and
+picks the head; M3's triage stage slots in between the two over this same list.
 """
 
 from __future__ import annotations
 
 from ave.adapters import get_default_pack
+from ave.findings import UNATTRIBUTED_SOURCE, all_sources, attribute, merge_findings
 from ave.records.store import make_span, now_iso
-from ave.state import AVEState
+from ave.state import AVEState, Finding
 
 
 def match(state: AVEState) -> AVEState:
     started = now_iso()
-    findings = get_default_pack().find(state.get("target_ref", "unset"))
+    pack = get_default_pack()
+    target_ref = state.get("target_ref", "unset")
+
+    # Every source, in ingest order. A producer that forgot to stamp its source shows up
+    # as `unattributed` rather than blank, so the omission is visible in the run record.
+    ingested: list[Finding] = []
+    for produced in (state.get("findings") or [], pack.find(target_ref)):
+        ingested.extend(attribute(produced, default_source=UNATTRIBUTED_SOURCE))
+
+    findings = merge_findings(ingested, location_key=pack.dedup_key)
+    sources = sorted({source for f in ingested for source in all_sources(f)})
     return {
         "findings": findings,
-        "spans": [make_span("match", started, {"found": len(findings)})],
+        "spans": [
+            make_span(
+                "match",
+                started,
+                {"found": len(findings), "ingested": len(ingested), "sources": sources},
+            )
+        ],
     }

@@ -26,11 +26,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote_plus
 
+from ave.findings import all_sources
 from ave.policy import load_policy
-from ave.state import AVEState, PinnedExploitResult
+from ave.state import AVEState, Finding, PinnedExploitResult
 
 # Rung key -> (label, one-line meaning). Order is the ladder's order.
 _LADDER_ROWS: list[tuple[str, str]] = [
@@ -183,6 +184,33 @@ def _safe_attack_exchange(change: dict[str, Any]) -> dict[str, str] | None:
             return None
         cleaned[key] = stripped
     return cleaned
+
+
+def _found_by(finding: dict[str, Any]) -> str:
+    sources = all_sources(cast("Finding", finding))
+    text = f"found by `{sources[0]}`"
+    if len(sources) > 1:
+        text += ", corroborated by " + ", ".join(f"`{s}`" for s in sources[1:])
+    return text
+
+
+def _selection(finding: dict[str, Any], rationale: dict[str, Any]) -> list[str]:
+    """Why *this* finding, out of everything the run ingested. Quotes the run's own
+    recorded rationale and never reconstructs one."""
+    if not rationale:
+        return [
+            "**Selected** without a recorded selection rationale — this run did not say "
+            "why this finding was chosen.",
+        ]
+    candidates = rationale.get("candidates", "?")
+    noun = "finding" if candidates == 1 else "findings"
+    lines = [
+        f"**Selected** 1 of {candidates} ingested {noun} — "
+        f"{rationale.get('why', 'no reason recorded')}; {_found_by(finding)}.",
+        f"*Rank function: {rationale.get('rank_function', 'unstated')}; dependents "
+        f"measured for {rationale.get('dependents_measured', '?')} of {candidates}.*",
+    ]
+    return lines
 
 
 def _oracle_ref(finding: dict[str, Any]) -> str:
@@ -361,10 +389,11 @@ def _still_open(
     lines = ["### Still open", ""]
     others = [f for f in findings if f.get("id") != selected.get("id")]
     if others:
-        lines.append("| Instance | Where |")
-        lines.append("|---|---|")
+        lines.append("| Instance | Where | Found by |")
+        lines.append("|---|---|---|")
         for f in others:
-            lines.append(f"| `{f.get('id', '?')}` | `{f.get('location', '?')}` |")
+            sources = ", ".join(f"`{s}`" for s in all_sources(cast("Finding", f)))
+            lines.append(f"| `{f.get('id', '?')}` | `{f.get('location', '?')}` | {sources} |")
     else:
         lines.append(
             "This run's finding sources surfaced no other instances. (v1 surfaces the "
@@ -541,6 +570,7 @@ def render_pr_body(state: AVEState) -> str:
         f"**Target** `{state.get('target_ref')}` · pack `{state.get('target_ref_pack')}` "
         f"· policy `{policy_version}`"
     )
+    lines.extend(_selection(finding, dict(state.get("selection_rationale") or {})))
     lines.append("")
     lines.extend(_attack_exchange(finding, change, pinned))
     lines.extend(_ladder(finding, ladder, ready, pinned))
