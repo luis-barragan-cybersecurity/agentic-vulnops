@@ -90,14 +90,14 @@
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
     "path": "app/apis/menu/services/update_menu_item_service.py",
     "start": {
-      "line": 19,
+      "line": 15,
       "col": 1,
-      "offset": 842
+      "offset": 527
     },
     "end": {
-      "line": 28,
+      "line": 24,
       "col": 19,
-      "offset": 1287
+      "offset": 928
     },
     "extra": {
       "message": "This state-changing route handler authenticates the caller (Depends(get_current_user)) but declares no RolesBasedAuthChecker role dependency. Any authenticated user, regardless of role, can invoke it \u2014 a possible missing function-level authorization check (BFLA). If a role gate is required, add auth=Depends(RolesBasedAuthChecker([...])).",
@@ -119,14 +119,14 @@
     "check_id": "evals.baseline.semgrep.rules.missing-role-checker-on-privileged-mutation",
     "path": "app/apis/referrals/service.py",
     "start": {
-      "line": 63,
+      "line": 54,
       "col": 1,
-      "offset": 2284
+      "offset": 1624
     },
     "end": {
-      "line": 90,
+      "line": 81,
       "col": 6,
-      "offset": 3214
+      "offset": 2554
     },
     "extra": {
       "message": "This state-changing route handler authenticates the caller (Depends(get_current_user)) but declares no RolesBasedAuthChecker role dependency. Any authenticated user, regardless of role, can invoke it \u2014 a possible missing function-level authorization check (BFLA). If a role gate is required, add auth=Depends(RolesBasedAuthChecker([...])).",
