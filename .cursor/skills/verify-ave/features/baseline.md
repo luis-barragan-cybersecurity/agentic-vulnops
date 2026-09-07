@@ -26,12 +26,14 @@ Preconditions:
 - **Direct entry.** From the repo root, run `.cursor/skills/verify-ave/control-ave capture baseline-direct -- .venv/bin/python evals/baseline/semgrep/score.py`. It skips the Makefile's install attempt, exits `0`, and reports whether it used live or frozen findings.
 - **Score.** Stdout starts with `AVE role-pattern Semgrep baseline — score vs target catalog`, reports `handlers flagged: 6`, and shows class-aware BOLA recall `0%  (0/4)`.
 - **Source.** The final line says either `[scored from: live semgrep; wrote results.json]` or `[scored from: frozen semgrep-findings.json; wrote results.json]`.
-- **Offline replay.** To force the committed fallback when Semgrep is absent, run `PIP_NO_INDEX=1 .cursor/skills/verify-ave/control-ave capture baseline-frozen -- make -- baseline`. A failed best-effort install may appear on stderr; the feature passes when scoring still exits `0` from frozen findings.
+- **Offline replay.** When Semgrep is absent, run `PIP_NO_INDEX=1 .cursor/skills/verify-ave/control-ave capture baseline-frozen -- make -- baseline`. A failed best-effort install may appear on stderr; the feature passes when scoring still exits `0` from frozen findings.
+- **Installed Semgrep.** To exercise frozen replay without uninstalling the venv copy, first confirm `PATH=/usr/bin:/bin command -v semgrep` prints nothing. Then run `.cursor/skills/verify-ave/control-ave capture baseline-frozen -- env -u AVE_SEMGREP PATH=/usr/bin:/bin .venv/bin/python evals/baseline/semgrep/score.py`.
 - **Proof.** Keep `artifacts/baseline/stdout.txt` and `exit_code.txt`. Confirm `evals/baseline/semgrep/results.json` contains the printed score. If frozen replay changed either tracked JSON file, record that as drift rather than restoring it.
 
 ## Gotchas
 
 - `make baseline` may install Semgrep into the active venv before scoring. Use the frozen replay when network installation is not part of the proof.
+- `control-ave` redirects Semgrep's log and settings to `artifacts/.semgrep/`. A bare Semgrep run can fail in a sandbox that cannot write `~/.semgrep`.
 - This is the pattern-scanner comparator, not `ave scoreboard`. It does not update the README results table.
 - The generous location score gives I-02 credit for overlap. The class-aware score counts I-02 as a wrong-class false positive and keeps BOLA recall at `0/4`.
 - CI does not run `make baseline` today. The committed findings make the score reproducible, but the workflow has no baseline job.

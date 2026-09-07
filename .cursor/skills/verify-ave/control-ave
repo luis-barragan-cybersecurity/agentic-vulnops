@@ -5,6 +5,9 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
 VENV_PY="$REPO_ROOT/.venv/bin/python"
 VENV_BIN="$REPO_ROOT/.venv/bin"
+SEMGREP_STATE_DIR="$SKILL_DIR/artifacts/.semgrep"
+export SEMGREP_LOG_FILE="${SEMGREP_LOG_FILE:-$SEMGREP_STATE_DIR/semgrep.log}"
+export SEMGREP_SETTINGS_FILE="${SEMGREP_SETTINGS_FILE:-$SEMGREP_STATE_DIR/settings.yml}"
 
 die() {
   echo "control-ave: $*" >&2

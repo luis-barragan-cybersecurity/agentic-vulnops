@@ -25,6 +25,7 @@ Preconditions:
 - **Break only.** Seed is a print. Run `.cursor/skills/verify-ave/control-ave capture break-print -- cli -- break`. Exit code `0`. Stdout contains `break: the vendored target already carries the seeded catalog (target/CATALOG.md,` and `8 authorization instances + decoys`. `git status --porcelain -- target` is unchanged. `target/dvrestaurant/` and `target/catalog.json` already exist; break does not add them.
 - **Eradicate CLI.** Run the money-shot. Run `.cursor/skills/verify-ave/control-ave capture eradicate-demo -- cli -- eradicate`. Exit code `0`.
 - **Order.** Stdout contains the two break lines, then `eradicate: break then run. HITL gate auto-approves (no pause).`, then the same run summary as [Run the loop](./run-stub-loop.md): `human_approved = True`, `ready_to_merge = False`, `pr_ref` starting with `local:pr/`.
+- **Run artifacts.** Open the printed `run_record` and `pr_body` paths. Apply the selection, attribution, lifecycle, and honest-readiness checks from [Run the loop](./run-stub-loop.md).
 - **Make entry.** Run `.cursor/skills/verify-ave/control-ave make -- eradicate`. Same stdout shape and exit `0`.
 - **Proof.** `artifacts/eradicate-demo/stdout.txt` shows break-then-run. `git status --porcelain -- README.md target` still has no new files. New writes, if any, are under `results/runs/`.
 
