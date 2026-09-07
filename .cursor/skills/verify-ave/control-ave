@@ -53,7 +53,8 @@ cmd_doctor() {
   [[ "$help" == *"  break"* ]] || die "ave --help missing break"
   [[ "$help" == *"  eradicate"* ]] || die "ave --help missing eradicate"
   [[ "$help" == *"  scoreboard"* ]] || die "ave --help missing scoreboard"
-  echo "ok commands=run,break,eradicate,scoreboard"
+  [[ "$help" == *"  inventory"* ]] || die "ave --help missing inventory"
+  echo "ok commands=run,break,eradicate,scoreboard,inventory"
   echo "ok repo=$REPO_ROOT"
 }
 
@@ -92,7 +93,12 @@ cmd_capture() {
   esac
   local dir="$SKILL_DIR/artifacts/$name"
   mkdir -p "$dir"
-  printf '%s\n' "$*" > "$dir/command.txt"
+  {
+    [[ -v AVE_PINNED_ENV ]] && printf 'AVE_PINNED_ENV=%q ' "$AVE_PINNED_ENV"
+    [[ -v PIP_NO_INDEX ]] && printf 'PIP_NO_INDEX=%q ' "$PIP_NO_INDEX"
+    printf '%q ' "$@"
+    printf '\n'
+  } > "$dir/command.txt"
   set +e
   PATH="$VENV_BIN:$PATH" "$@" >"$dir/stdout.txt" 2>"$dir/stderr.txt"
   local ec=$?
