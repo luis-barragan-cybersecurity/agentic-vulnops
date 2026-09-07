@@ -22,6 +22,12 @@ work (copyleft), which is why AVE ships the verbatim GPL-3.0 [`LICENSE`](../LICE
 credits theowni in [`ATTRIBUTION.md`](../ATTRIBUTION.md). Per GPL-3.0 §5, every target file
 AVE modifies (e.g. seeded authorization instances) must be **marked as changed and dated**.
 
+The in-file marks say only *that* a file was modified, *by whom* and *when*, and point here.
+They deliberately name no instance, class, oracle or intent: the application source under
+`dvrestaurant/app/` (minus `app/tests/`) is what AVE's own finder reads, so the substance of
+each modification lives only in [`CATALOG.md`](CATALOG.md) / [`catalog.json`](catalog.json)
+and the `app/tests/vulns/` oracles — the answer key, which the finder never sees.
+
 > Upstream's `pyproject.toml` declares `license = "MIT"`, contradicting its GPL-3.0
 > `LICENSE`. The `LICENSE` file governs; the MIT metadata is treated as stale and is not
 > relied upon. See `ATTRIBUTION.md`.

@@ -1,12 +1,6 @@
-# --- AVE seeded authorization instances (GPL-3.0 §5: file modified) ---
-# Changed 2026-08-29 by the AVE build (planning ticket 04). Two deliberately
-# introduced BOLA (object-level) gaps for the AVE benchmark:
-#   * get_referral_code_endpoint honours an attacker-supplied `username`   (I-07)
-#   * get_discount_coupons honours an attacker-supplied `user_id`          (I-06)
-# Both keep a valid role/identity, so a role-pattern scanner stays blind — the
-# gap is a missing ownership predicate, not a missing role check. Oracles live in
-# app/tests/vulns/ave_seed_*; see target/CATALOG.md. Upstream file at d32d0997
-# had neither parameter.
+# GPL-3.0 §5 notice: this file is not upstream-verbatim. Modified from the pinned
+# upstream tree (d32d0997) by the AVE project on 2026-08-29; notice revised 2026-09-06.
+# Licensing and provenance: target/README.md.
 from typing import List, Optional
 
 from apis.auth.schemas import User
@@ -48,9 +42,6 @@ async def get_referral_code_endpoint(
     username: Optional[str] = None,
 ):
     """Obtains or creates a referral code for the current user."""
-    # AVE-seeded BOLA (I-07): when `username` is supplied the lookup targets that
-    # user instead of the caller, leaking another user's referral code. The fix is
-    # to bind the lookup to `current_user` and ignore the parameter.
     if username is not None:
         db_user = db.query(UserModel).filter(UserModel.username == username).first()
     else:
@@ -97,9 +88,6 @@ async def get_discount_coupons(
     user_id: Optional[int] = None,
 ):
     """Retrieve all discount coupons for the current user."""
-    # AVE-seeded BOLA (I-06): when `user_id` is supplied the query filters on it
-    # instead of the caller, exposing another user's coupons. The fix is to always
-    # filter on `current_user.id` and ignore the parameter.
     target_user_id = user_id if user_id is not None else current_user.id
     coupons = (
         db.query(DiscountCoupon).filter(DiscountCoupon.user_id == target_user_id).all()
