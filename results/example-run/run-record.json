@@ -1,12 +1,12 @@
 {
-  "run_id": "d7fe25ceb51644a9b85f510815d077c2",
+  "run_id": "a1dbd8523c2a4547a350f22b96c59c56",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-05T01:32:20.348107+00:00",
-      "ended_at": "2026-09-05T01:32:20.349080+00:00",
+      "started_at": "2026-09-06T19:51:33.644610+00:00",
+      "ended_at": "2026-09-06T19:51:33.645763+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,24 +14,46 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-05T01:32:20.349630+00:00",
-      "ended_at": "2026-09-05T01:32:20.349861+00:00",
+      "started_at": "2026-09-06T19:51:33.646170+00:00",
+      "ended_at": "2026-09-06T19:51:33.646499+00:00",
       "attributes": {
-        "found": 1
+        "found": 1,
+        "ingested": 1,
+        "sources": [
+          "ave:pack-anchor"
+        ]
       }
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-05T01:32:20.351022+00:00",
-      "ended_at": "2026-09-05T01:32:20.351034+00:00",
+      "started_at": "2026-09-06T19:51:33.648005+00:00",
+      "ended_at": "2026-09-06T19:51:33.648027+00:00",
       "attributes": {
-        "selected": true
+        "selected": true,
+        "selection": {
+          "rank_function": "confidence desc \u2192 measured dependents asc (unmeasured last) \u2192 location asc \u2192 ingest order",
+          "candidates": 1,
+          "dependents_measured": 0,
+          "selected": "I-04",
+          "why": "the only finding this run ingested",
+          "ranking": [
+            {
+              "id": "I-04",
+              "confidence": 0.9,
+              "dependents": null,
+              "location": "app/apis/orders/services/get_order_service.py:get_order",
+              "sources": [
+                "ave:pack-anchor"
+              ]
+            }
+          ]
+        }
       }
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-05T01:32:20.351426+00:00",
-      "ended_at": "2026-09-05T01:32:20.354436+00:00",
+      "started_at": "2026-09-06T19:51:33.648332+00:00",
+      "ended_at": "2026-09-06T19:51:33.650819+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -40,24 +62,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-05T01:32:20.356999+00:00",
-      "ended_at": "2026-09-05T01:32:20.357278+00:00",
+      "started_at": "2026-09-06T19:51:33.658780+00:00",
+      "ended_at": "2026-09-06T19:51:33.659074+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-05T01:32:20.357759+00:00",
-      "ended_at": "2026-09-05T01:32:20.357764+00:00",
+      "started_at": "2026-09-06T19:51:33.659631+00:00",
+      "ended_at": "2026-09-06T19:51:33.659634+00:00",
       "attributes": {
-        "pr_ref": "local:pr/d7fe25ceb51644a9b85f510815d077c2"
+        "pr_ref": "local:pr/a1dbd8523c2a4547a350f22b96c59c56"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-05T01:32:20.358493+00:00",
-      "ended_at": "2026-09-05T01:32:20.358506+00:00",
+      "started_at": "2026-09-06T19:51:33.660612+00:00",
+      "ended_at": "2026-09-06T19:51:33.660624+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -67,8 +89,8 @@
   "findings": [
     {
       "finding_id": "I-04",
-      "first_observed_at": "2026-09-05T01:32:20.348107+00:00",
-      "triaged_at": "2026-09-05T01:32:20.351426+00:00",
+      "first_observed_at": "2026-09-06T19:51:33.644610+00:00",
+      "triaged_at": "2026-09-06T19:51:33.648332+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false

@@ -30,14 +30,23 @@ def _raw() -> dict[str, Any]:
     return cast("dict[str, Any]", json.loads(_CATALOG_PATH.read_text()))
 
 
+#: `source` on the one finding the pack claims. The pack's finder today *is* the anchor
+#: declaration; a real finder stamps its own name (`ave:llm-finder`) when it lands.
+ANCHOR_SOURCE = "ave:pack-anchor"
+#: `source` on the scored answer key. Deliberately distinct from every finder's, so a run
+#: finding carrying it is a visible honesty violation, not a structural one only.
+GROUND_TRUTH_SOURCE = "catalog:ground-truth"
+
+
 def anchor_id() -> str:
     """The instance the end-to-end loop drives (has a hermetic in-process oracle)."""
     return str(_raw()["anchor"])
 
 
-def _to_finding(inst: dict[str, Any]) -> Finding:
+def _to_finding(inst: dict[str, Any], *, source: str) -> Finding:
     finding: Finding = {
         "id": inst["id"],
+        "source": source,
         "kind": (
             "object-ownership-gap" if inst["family"] == "BOLA" else "function-role-gap"
         ),
@@ -59,10 +68,13 @@ def _to_finding(inst: dict[str, Any]) -> Finding:
 def ground_truth() -> list[Finding]:
     """Every catalogued vuln instance as a neutral Finding, ordered by id. This is the
     answer key ticket 07 scores against, not something a finding source may return."""
-    return [_to_finding(i) for i in sorted(_raw()["instances"], key=lambda i: i["id"])]
+    return [
+        _to_finding(i, source=GROUND_TRUTH_SOURCE)
+        for i in sorted(_raw()["instances"], key=lambda i: i["id"])
+    ]
 
 
 def anchor() -> Finding:
     """The one instance the loop drives, the only one with a hermetic in-process oracle."""
     by_id = {i["id"]: i for i in _raw()["instances"]}
-    return _to_finding(by_id[anchor_id()])
+    return _to_finding(by_id[anchor_id()], source=ANCHOR_SOURCE)

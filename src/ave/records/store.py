@@ -39,30 +39,38 @@ def _span_start(spans: list[dict[str, Any]], phase: str) -> str | None:
     return next((s.get("started_at") for s in spans if s.get("phase") == phase), None)
 
 
-def _finding_lifecycle(state: AVEState) -> FindingLifecycle | None:
-    """Synthesize the selected finding's lifecycle from the run's spans.
+def _finding_lifecycles(state: AVEState) -> list[FindingLifecycle]:
+    """One lifecycle per finding the run ingested, synthesized from the run's spans.
 
-    `first_observed_at` is first-observed-in-run: the run's own start (intake). `triaged_at`
-    is when Decide produced the record; `verified_at` is set only if the ladder greened and
-    the PR is ready-to-merge — otherwise the finding stays `open` (the honest v1 state, where
-    only T1 flips). Metrics flat-map these across runs.
+    `first_observed_at` is first-observed-in-run — the run's own start (intake) — for every
+    finding, since Match saw them all at once. Only the selected head was triaged: its
+    `triaged_at` is when Decide produced the record, and its `verified_at` is set only if
+    the ladder greened and the PR is ready-to-merge. Every other finding the run ingested
+    is recorded honestly as `open` with no triage timestamp — one PR per run, so nothing
+    else was decided on. Metrics flat-map these across runs.
     """
-    selected = state.get("selected_finding")
-    if not selected:
-        return None
     spans = state.get("spans", [])
     first_observed = _span_start(spans, "intake") or _span_start(spans, "match")
     if first_observed is None:
-        return None
+        return []
+    selected = state.get("selected_finding")
+    findings = list(state.get("findings") or [])
+    if selected and all(f.get("id") != selected.get("id") for f in findings):
+        findings.append(selected)
     ready = bool(state.get("ready_to_merge"))
-    verified_at = _span_start(spans, "verify") if ready else None
-    return FindingLifecycle(
-        finding_id=str(selected.get("id", "unknown")),
-        first_observed_at=first_observed,
-        triaged_at=_span_start(spans, "decide"),
-        verified_at=verified_at,
-        outcome="verified_fixed" if ready else "open",
-    )
+    lifecycles: list[FindingLifecycle] = []
+    for finding in findings:
+        is_head = selected is not None and finding.get("id") == selected.get("id")
+        lifecycles.append(
+            FindingLifecycle(
+                finding_id=str(finding.get("id", "unknown")),
+                first_observed_at=first_observed,
+                triaged_at=_span_start(spans, "decide") if is_head else None,
+                verified_at=_span_start(spans, "verify") if is_head and ready else None,
+                outcome="verified_fixed" if is_head and ready else "open",
+            )
+        )
+    return lifecycles
 
 
 def build_run_record(state: AVEState) -> RunRecord:
@@ -83,9 +91,7 @@ def build_run_record(state: AVEState) -> RunRecord:
                 attributes=span.get("attributes", {}),
             )
         )
-    lifecycle = _finding_lifecycle(state)
-    if lifecycle is not None:
-        record.findings.append(lifecycle)
+    record.findings.extend(_finding_lifecycles(state))
     # v1's loop always fixes: no accepted-risk / deferred exceptions yet (see run_record).
     return record
 

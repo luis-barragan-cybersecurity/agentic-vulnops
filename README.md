@@ -181,8 +181,8 @@ flowchart TB
   classDef rung fill:#f4f4f5,stroke:#52525b,color:#18181b
 
   IN["1 · Intake<br/>pin the target ref and the policy version · open the run record"]:::phase
-  MA["2 · Match<br/>pack.find() emits the catalog anchor as a Finding"]:::phase
-  AS["3 · Assess<br/>pack.blast_radius() · pack.fix_plan() · select findings[0]"]:::phase
+  MA["2 · Match<br/>fan-in over finding sources · attribute · merge on (dedup_key, kind)<br/>pack.find() still emits only the catalog anchor"]:::phase
+  AS["3 · Assess<br/>rank by the stated function · select the head<br/>pack.blast_radius() · pack.fix_plan()"]:::phase
   DE["4 · Decide<br/>decide(finding, fix_plan, blast_radius, policy) · two-part decision record"]:::phase
   AUTO["Autonomous<br/>policy can return this · unused on the seeded instance"]:::ok
   ESC["Escalation — a named decide() route<br/>out_of_policy_change · blast_radius_exceeded · unknown_blast_radius"]:::stop

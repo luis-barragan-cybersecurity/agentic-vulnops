@@ -87,6 +87,17 @@ class PythonAuthzPack:
         missing role check, and that blindness is the case AVE exists to catch."""
         return [catalog.anchor()]
 
+    def dedup_key(self, finding: Finding) -> str:
+        """`file:symbol` as this pack reports locations. A trailing numeric component is
+        a *line* (what a SARIF feed reports) and resolving it to the enclosing symbol is
+        intake work; until then the raw location is returned unchanged so the finding
+        stays a visible duplicate rather than being merged on a guess."""
+        location = str(finding.get("location", "")).strip()
+        file, sep, tail = location.rpartition(":")
+        if not sep or not file or not tail or tail.isdigit():
+            return location
+        return f"{file}:{tail}"
+
     def _is_anchor(self, finding: Finding) -> bool:
         return finding.get("id") == catalog.anchor_id()
 
