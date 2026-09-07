@@ -6,6 +6,7 @@ Backs the Makefile verbs and the `ave` console script.
   ave break       -> report the semantic flaws already seeded in the target (demo step 1)
   ave eradicate   -> break -> run -> HITL approve -> PR (demo steps 1-3)
   ave scoreboard  -> regenerate the results table from run records (demo step 4)
+  ave inventory   -> the deterministic find-stage inventory + coverage denominator
 
 The walking skeleton (ticket 03) makes `run` real end to end: it walks all seven phases
 and writes a run record + PR bundle under `results/runs/<id>/`. Ticket 04 pointed the pack
@@ -74,6 +75,26 @@ def _scoreboard(_: argparse.Namespace) -> int:
     return 0
 
 
+def _inventory(_: argparse.Namespace) -> int:
+    """Show the deterministic find-stage inventory: the coverage denominator and each route
+    handler's pre-filter screen. No model is involved — this is the evidence layer the LLM
+    finder (ticket 25) reasons over, made inspectable on its own (ticket 23)."""
+    from ave.adapters.python_authz.code_facts import CodeFactsStore
+
+    store = CodeFactsStore.build()
+    coverage = store.coverage()
+    print(f"inventory: {coverage.summary()}.")
+    print(
+        f"  examine {coverage.by_screen['examine']}, "
+        f"cheap {coverage.by_screen['cheap']}, "
+        f"dropped {coverage.by_screen['drop']} (by arithmetic, before any model call)."
+    )
+    for record in store.inventory.handlers:
+        result = store.screen_of(record.handler_id)
+        print(f"  {result.screen:8} {record.method:6} {record.path:32} {record.symbol}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ave", description="Autonomous Vulnerability Eradication."
@@ -85,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         ("break", _break, "report the semantic flaws already seeded in the target"),
         ("eradicate", _eradicate, "break -> run -> HITL approve -> PR (demo)"),
         ("scoreboard", _scoreboard, "regenerate the results table from run records"),
+        ("inventory", _inventory, "deterministic find-stage inventory + coverage"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(handler=handler)
