@@ -26,7 +26,7 @@ Preconditions:
 - `control-ave doctor` succeeded.
 - Working tree on `README.md` and `target/` must stay clean. The command writes gitignored files under `results/runs/`.
 
-- **Help.** Show subcommands. Run `.cursor/skills/verify-ave/control-ave cli -- --help`. Exit code `0`. Stdout lists `run`, `break`, `eradicate`, `scoreboard`.
+- **Help.** Show subcommands. Run `.cursor/skills/verify-ave/control-ave cli -- --help`. Exit code `0`. Stdout lists `run`, `break`, `eradicate`, `scoreboard`, and `inventory`.
 - **CLI entry.** Run the loop. Run `.cursor/skills/verify-ave/control-ave capture run-stub-loop -- cli -- run`. `artifacts/run-stub-loop/exit_code.txt` is `0`.
 - **Gate line.** Stdout contains `run: walking seven phases; HITL gate auto-approves (no pause).` and `run complete.`
 - **Outcome.** Stdout contains `human_approved = True`, `ready_to_merge = False`, and a `pr_ref` starting with `local:pr/`.
