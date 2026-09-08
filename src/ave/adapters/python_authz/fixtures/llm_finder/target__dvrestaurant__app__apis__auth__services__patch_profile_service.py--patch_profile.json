@@ -1,0 +1,22 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/auth/services/patch_profile_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/auth/services/patch_profile_service.py:patch_profile",
+          "is_finding": false,
+          "rationale": "Operates only on current_user.username; there is no caller-controlled object selection. Mass-assignment of fields is an input-validation concern, not an authorization-ownership gap."
+        }
+      }
+    ]
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/referrals/service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "model_definition",
+        "arguments": {
+          "name": "DiscountCoupon"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/referrals/service.py:get_discount_coupons",
+          "is_finding": true,
+          "rationale": "Honours an attacker-supplied user_id query parameter on one branch (user_id if user_id is not None else current_user.id), so a caller reads another user's discount coupons (BOLA); the caller-identity branch masks it.",
+          "kind": "object-ownership-gap",
+          "confidence": 0.86,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/referrals/service.py",
+              "start_line": 91,
+              "end_line": 91,
+              "contains": "user_id if user_id is not None else current_user.id"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

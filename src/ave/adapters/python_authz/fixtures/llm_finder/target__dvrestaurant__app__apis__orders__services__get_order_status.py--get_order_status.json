@@ -1,0 +1,22 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/orders/services/get_order_status.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status",
+          "is_finding": false,
+          "rationale": "Fetches Order by caller-supplied id but guards it on every path with db_order.user_id != current_user.id, binding access to the caller \u2014 a correct post-fetch ownership check, not a gap."
+        }
+      }
+    ]
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "model_definition",
+        "arguments": {
+          "name": "Order"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/orders/services/get_order_service.py:get_order",
+          "is_finding": true,
+          "rationale": "Fetches an Order by caller-supplied order_id and returns it with no ownership binding: Order.user_id is never constrained and there is no post-fetch guard, so any authenticated customer reads any customer's order (BOLA).",
+          "kind": "object-ownership-gap",
+          "confidence": 0.9,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+              "start_line": 17,
+              "end_line": 17,
+              "contains": "Order.id == order_id"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

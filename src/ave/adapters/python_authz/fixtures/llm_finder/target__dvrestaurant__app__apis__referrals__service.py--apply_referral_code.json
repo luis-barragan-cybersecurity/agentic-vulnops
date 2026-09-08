@@ -1,0 +1,22 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/referrals/service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/referrals/service.py:apply_referral_code",
+          "is_finding": false,
+          "rationale": "Credits the caller's own account (DiscountCoupon.user_id = current_user.id); the referral_code lookup selects the referrer to attribute, not an object the caller reads or mutates, so there is no ownership gap."
+        }
+      }
+    ]
+  ]
+}

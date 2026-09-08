@@ -1,0 +1,22 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/auth/services/register_user_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/auth/services/register_user_service.py:register_user",
+          "is_finding": false,
+          "rationale": "Public registration bootstrap; creates the caller's own account, no object to own."
+        }
+      }
+    ]
+  ]
+}
