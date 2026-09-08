@@ -10,7 +10,7 @@ By default, `ave run` walks the seven-phase graph on the hardcoded target ref `t
 - `run-claims-nothing` reports `ready_to_merge = False` and a `local:pr/` ref.
 - `run-selection` attributes the driven finding to `ave:llm-finder`, records the stated rank function, and explains why the run selected the I-04 location.
 - `run-lifecycles` persists one open lifecycle for every ingested finding.
-- `run-many-contract` covers multi-source attribution, de-duplication, ranking, and unselected open findings. The live pack already emits eight fixture findings. Synthetic extras still cover a second source.
+- `run-many-contract` covers multi-source attribution, de-duplication, ranking, and unselected open findings.
 - `run-pr-body` writes the locked, honest PR-body template and matches the committed example after run-specific values are normalized.
 
 ## How to get to it (user POV)
