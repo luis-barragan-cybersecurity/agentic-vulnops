@@ -54,7 +54,8 @@ cmd_doctor() {
   [[ "$help" == *"  eradicate"* ]] || die "ave --help missing eradicate"
   [[ "$help" == *"  scoreboard"* ]] || die "ave --help missing scoreboard"
   [[ "$help" == *"  inventory"* ]] || die "ave --help missing inventory"
-  echo "ok commands=run,break,eradicate,scoreboard,inventory"
+  [[ "$help" == *"  find"* ]] || die "ave --help missing find"
+  echo "ok commands=run,break,eradicate,scoreboard,inventory,find"
   echo "ok repo=$REPO_ROOT"
 }
 
