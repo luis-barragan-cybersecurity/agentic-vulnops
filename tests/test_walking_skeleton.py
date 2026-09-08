@@ -92,10 +92,17 @@ def test_catalog_ground_truth_holds_every_seeded_instance() -> None:
         assert oracle["polarity"] == "inverted"
 
 
-def test_find_claims_only_the_loop_anchor() -> None:
+def test_find_rediscovers_gaps_and_binds_one_drivable_anchor() -> None:
+    # The LLM finder (ticket 25) is the source now: find() returns the rediscovered gaps,
+    # all attributed to the model, and binds exactly the one at the anchor location to the
+    # loop's hermetic oracle so a single finding per run stays drivable.
     findings = get_default_pack().find("target/dvrestaurant@d32d0997")
-    assert [f["id"] for f in findings] == ["I-04"]
-    assert findings[0]["evidence"]["is_loop_anchor"] is True
+    assert len(findings) > 1
+    assert {f["source"] for f in findings} == {"ave:llm-finder"}
+    drivable = [f for f in findings if f["evidence"].get("is_loop_anchor")]
+    assert len(drivable) == 1
+    assert drivable[0]["location"] == catalog.anchor_location()
+    assert drivable[0]["evidence"]["oracle"]["polarity"] == "inverted"
 
 
 def test_non_anchor_instances_are_not_claimed() -> None:
@@ -114,7 +121,8 @@ def test_non_anchor_instances_are_not_claimed() -> None:
 
 def test_exploit_oracle_has_inverted_polarity() -> None:
     pack = get_default_pack()
-    anchor = pack.find("target/dvrestaurant@d32d0997")[0]
+    findings = pack.find("target/dvrestaurant@d32d0997")
+    anchor = next(f for f in findings if pack.can_drive(f))
     # Inverted polarity: exploit SUCCEEDS while vulnerable, is BLOCKED once fixed.
     assert pack.run_exploit(anchor, fixed=False) is True
     assert pack.run_exploit(anchor, fixed=True) is False

@@ -210,16 +210,21 @@ def test_graph_run_fails_closed_on_unmeasured_blast_radius() -> None:
     assert record["execution"]["route"] == "hitl_approved"
     assert record["execution"]["hitl_route"] == "unknown_blast_radius"
     assert record["response"]["classification"] == "object-ownership-gap"
-    assert record["citations"]["ground_truth"] == "catalog.ground_truth()#I-04"
+    # The driven finding is now the model's rediscovery at the anchor location (ticket 25),
+    # so the decision record cites that finding's own id, not the catalog's I-04 label.
+    driven_id = final["selected_finding"]["id"]
+    assert record["citations"]["ground_truth"] == f"catalog.ground_truth()#{driven_id}"
     assert record["policy_version"] == "1.0.0"
 
 
 def test_run_record_carries_the_finding_lifecycle() -> None:
     final = run_once(_INITIAL, auto_approve=True)
     run_record = build_run_record(final)
-    assert len(run_record.findings) == 1
-    lifecycle = run_record.findings[0]
-    assert lifecycle.finding_id == "I-04"
+    # A run now ingests every rediscovered finding; the driven one carries the full
+    # lifecycle, the rest are honest `open` entries (proven in test_many_findings).
+    assert len(run_record.findings) == len(final["findings"])
+    driven_id = final["selected_finding"]["id"]
+    lifecycle = next(lc for lc in run_record.findings if lc.finding_id == driven_id)
     assert lifecycle.first_observed_at is not None
     assert lifecycle.triaged_at is not None
     # The skeleton greens only T1, so the loop is honest: not verified, no exceptions.
