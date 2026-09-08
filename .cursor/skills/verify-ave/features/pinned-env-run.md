@@ -24,9 +24,9 @@ Preconditions:
 - `control-ave doctor` succeeded for AVE's own `.venv`.
 - `target/dvrestaurant/` exists.
 - `poetry` is on the `PATH`.
-- From `target/dvrestaurant/`, `poetry run python --version` reports Python 3.10 and `poetry run pytest app/tests/vulns/_ave_capture_bola_order_read.py -q` can import the target.
+- From `target/dvrestaurant/`, `poetry run python --version` succeeds and `poetry run pytest app/tests/vulns/_ave_capture_bola_order_read.py -q` can import the target.
 
-- **Pinned CLI entry.** Run `AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run -- cli -- run`. Exit code `0`.
+- **Pinned CLI entry.** Run `AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run -- cli -- run`. Exit code `0`. `artifacts/pinned-env-run/command.txt` includes the opt-in.
 - **Outcome.** Stdout contains the normal four run summary fields. The command still reports `ready_to_merge = False` because only T1 is green.
 - **Pinned success.** Open the printed `run_record`. The Prepare span has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true`. The Verify span has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE accepted the generated patch's `200` to `404` or `403` flip.
 - **Pinned PR body.** Open the printed `pr_body`. It carries the selection and attribution header from [Run the loop](./run-stub-loop.md). The opener has three `http` blocks for the request, the `200` response, and the I-04 harness's `404` response. It does not contain `Exchange not captured by this run.`
@@ -36,7 +36,7 @@ Preconditions:
 
 ## Gotchas
 
-- The command starts no server. It runs one short-lived target test and returns.
+- The command starts no server. On success, it runs the same short-lived capture test against the original target and an isolated patched copy, then returns.
 - The presence of `target/dvrestaurant/` and `poetry` does not prove that the target environment can run. Confirm the Python version and imports before treating the path as reachable.
 - A requested pinned failure never falls back to the hermetic T1. Read the run record or generated PR body for the failure status because the CLI summary does not print it.
 - A successful proof leaves `git status --porcelain -- target` unchanged apart from changes that were present before the command.
