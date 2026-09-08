@@ -1,6 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "0",
-  "description": "Prompt manifest — prompts-as-code for the AVE graph. Internal-first for v1 (not a committed export unless a later project needs it). Each phase that reasons registers its prompt here so it is versioned, diffable, and eval-addressable.",
-  "prompts": {}
+  "description": "Prompt manifest - prompts-as-code for the AVE graph. Internal-first for v1. Each phase that reasons registers its prompt here so it is versioned, diffable, and eval-addressable.",
+  "prompts": {
+    "python_authz.llm_finder.system": {
+      "version": 1,
+      "description": "System prompt for the per-candidate authorization finder (ticket 25).",
+      "owner": "python_authz",
+      "file": "python_authz/llm_finder.system.md"
+    },
+    "python_authz.llm_finder.candidate": {
+      "version": 1,
+      "description": "Per-candidate user prompt; {record} is the inventory record.",
+      "owner": "python_authz",
+      "file": "python_authz/llm_finder.candidate.md"
+    }
+  }
 }

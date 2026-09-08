@@ -23,6 +23,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The live model client (offline runs never need it; the finder replays fixtures).
+llm = ["anthropic>=0.40"]
 dev = [
   "ruff>=0.6",
   "mypy>=1.11",
@@ -52,7 +54,9 @@ no_implicit_reexport = true
 files = ["src", "evals"]
 
 [[tool.mypy.overrides]]
-module = ["langgraph.*", "langchain_core.*"]
+# `anthropic` is an optional dependency, imported lazily by the live model client and never
+# on the offline path; the package need not be installed to typecheck or run the finder.
+module = ["langgraph.*", "langchain_core.*", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
