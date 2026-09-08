@@ -43,6 +43,24 @@ def anchor_id() -> str:
     return str(_raw()["anchor"])
 
 
+def anchor_location() -> str:
+    """The anchor's `file:symbol` location, in the target's own path scheme. The one
+    location the pack has a working (hermetic) exploit oracle for, so a finding a real
+    finder reports there — whatever source found it — is the one the end-to-end loop can
+    still drive until generated exploits bind the rest (ticket 27)."""
+    by_id = {i["id"]: i for i in _raw()["instances"]}
+    inst = by_id[anchor_id()]
+    return f"{inst['file']}:{inst['symbol']}"
+
+
+def anchor_oracle() -> dict[str, Any]:
+    """The anchor's by-path exploit-oracle binding ({path, test, polarity, origin}). The
+    pack attaches this to whichever finding lands at the anchor location, so a model-found
+    finding there is verifiable by the loop's oracle without the finder ever reading it."""
+    by_id = {i["id"]: i for i in _raw()["instances"]}
+    return dict(by_id[anchor_id()]["oracle"])
+
+
 def _to_finding(inst: dict[str, Any], *, source: str) -> Finding:
     finding: Finding = {
         "id": inst["id"],

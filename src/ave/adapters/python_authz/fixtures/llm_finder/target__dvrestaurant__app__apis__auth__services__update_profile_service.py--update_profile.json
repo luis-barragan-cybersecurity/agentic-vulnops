@@ -1,0 +1,40 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "callers_of",
+        "arguments": {
+          "symbol": "get_user_by_username"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py:update_profile",
+          "is_finding": true,
+          "rationale": "Selects the profile to update by the caller-supplied body field user.username rather than current_user, so a caller updates another user's profile \u2014 the object is the identity itself (BOLA).",
+          "kind": "object-ownership-gap",
+          "confidence": 0.86,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+              "start_line": 27,
+              "end_line": 27,
+              "contains": "get_user_by_username(db, user.username)"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

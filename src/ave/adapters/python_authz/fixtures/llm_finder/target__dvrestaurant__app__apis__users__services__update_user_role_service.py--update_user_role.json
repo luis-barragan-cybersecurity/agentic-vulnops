@@ -1,0 +1,32 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py:update_user_role",
+          "is_finding": true,
+          "rationale": "Changes a user's role behind get_current_user only; the sole guard forbids the CHEF role, so any authenticated user escalates to other privileged roles (BFLA) \u2014 the role gate is a role check, not authentication.",
+          "kind": "function-role-gap",
+          "confidence": 0.84,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+              "start_line": 26,
+              "end_line": 26,
+              "contains": "update_user(db, user.username, user)"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

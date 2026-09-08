@@ -1,0 +1,22 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/auth/services/get_token_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/auth/services/get_token_service.py:get_token",
+          "is_finding": false,
+          "rationale": "Unauthenticated token issuance (login); no owned object is read or written."
+        }
+      }
+    ]
+  ]
+}

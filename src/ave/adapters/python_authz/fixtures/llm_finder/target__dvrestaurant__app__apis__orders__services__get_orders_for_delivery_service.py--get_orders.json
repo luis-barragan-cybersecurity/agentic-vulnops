@@ -1,0 +1,32 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py:get_orders",
+          "is_finding": true,
+          "rationale": "Lists every order for delivery with no auth dependency at all, so an unauthenticated caller reads all orders \u2014 a function that must require a delivery/staff role exposed to the public (BFLA).",
+          "kind": "function-role-gap",
+          "confidence": 0.8,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+              "start_line": 30,
+              "end_line": 30,
+              "contains": "db.query(Order)"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

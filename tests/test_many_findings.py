@@ -217,25 +217,34 @@ def test_no_run_finding_ever_carries_the_ground_truth_source() -> None:
 # --- the run shape end to end ------------------------------------------------------------
 
 
-def test_run_ingests_one_attributed_finding_and_records_why_it_was_selected() -> None:
+def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
+    # The LLM finder (ticket 25) turns on real multiplicity: a run ingests every gap the
+    # model rediscovered, all `ave:llm-finder`, and drives the one bound to the loop oracle.
     final = run_once(_INITIAL, auto_approve=True)
-    assert len(final["findings"]) == 1  # the pack still claims only the loop anchor
-    assert final["findings"][0]["source"] == catalog.ANCHOR_SOURCE
+    assert len(final["findings"]) > 1
+    assert {f["source"] for f in final["findings"]} == {"ave:llm-finder"}
+    driven = final["selected_finding"]
+    assert driven is not None and driven["evidence"]["is_loop_anchor"] is True
     rationale = final["selection_rationale"]
-    assert rationale["candidates"] == 1
-    assert rationale["selected"] == "I-04"
-    assert rationale["dependents_measured"] == 0
+    assert rationale["candidates"] == len(final["findings"])
+    assert rationale["selected"] == driven["id"]
+    assert rationale["driven_is_top_ranked"] is True
+    # Every other rediscovered finding is real but not yet drivable (ticket 27 binds them).
+    assert len(rationale["deferred_pending_exploit"]) == len(final["findings"]) - 1
     match = next(s for s in final["spans"] if s["phase"] == "match")
-    assert match["attributes"]["found"] == 1
-    assert match["attributes"]["ingested"] == 1
-    assert match["attributes"]["sources"] == [catalog.ANCHOR_SOURCE]
+    assert match["attributes"]["found"] == len(final["findings"])
+    assert match["attributes"]["sources"] == ["ave:llm-finder"]
+    # Ticket 23's handoff: the find span now carries the coverage denominator.
+    assert "coverage" in match["attributes"]["find_stage"]
+    assert match["attributes"]["find_stage"]["coverage"]["summary"].startswith("examined ")
     assess = next(s for s in final["spans"] if s["phase"] == "assess")
     assert assess["attributes"]["selection"]["rank_function"] == RANK_FUNCTION
 
 
 def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:
     final = run_once(_INITIAL, auto_approve=True)
-    spans = final["spans"]
+    driven_id = final["selected_finding"]["id"]
+    ingested_ids = {f["id"] for f in final["findings"]}
     state: AVEState = cast(
         "AVEState",
         {
@@ -245,18 +254,18 @@ def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:
                 _finding("X-1", location="app/a.py:one", source="sarif:tool"),
                 _finding("X-2", location="app/b.py:two", source="ave:llm"),
             ],
-            "spans": spans,
+            "spans": final["spans"],
         },
     )
     record = build_run_record(state)
     by_id = {lc.finding_id: lc for lc in record.findings}
-    assert set(by_id) == {"I-04", "X-1", "X-2"}
-    assert by_id["I-04"].triaged_at is not None
+    assert set(by_id) == ingested_ids | {"X-1", "X-2"}
+    assert by_id[driven_id].triaged_at is not None
     for other in ("X-1", "X-2"):
         assert by_id[other].outcome == "open"
         assert by_id[other].triaged_at is None
         assert by_id[other].verified_at is None
-        assert by_id[other].first_observed_at == by_id["I-04"].first_observed_at
+        assert by_id[other].first_observed_at == by_id[driven_id].first_observed_at
     json.dumps(record.findings[0].__dict__)  # serialisable, like the persisted record
 
 
@@ -268,19 +277,21 @@ def test_pr_body_says_which_of_many_was_selected_and_lists_the_rest_still_open()
     ]
     findings = [*final["findings"], *others]
     head, rationale = select_head(findings)
-    assert head is not None and head["id"] == "I-04"
+    driven_id = final["selected_finding"]["id"]
+    assert head is not None and head["id"] == driven_id  # top confidence is the anchor gap
     state = cast(
         "AVEState", {**final, "findings": findings, "selection_rationale": rationale}
     )
     body = render_pr_body(state)
-    assert "**Selected** 1 of 3 ingested findings" in body
+    assert f"**Selected** 1 of {len(findings)} ingested findings" in body
     assert RANK_FUNCTION in body
     still_open = body[body.find("### Still open") : body.find("### Cleared")]
     assert "`X-1`" in still_open and "`sarif:tool`" in still_open
     assert "`X-2`" in still_open and "`ave:llm`" in still_open
 
 
-def test_golden_pr_body_states_the_single_ingested_finding_honestly() -> None:
-    body = render_pr_body(run_once(_INITIAL, auto_approve=True))
-    assert "**Selected** 1 of 1 ingested finding" in body
-    assert f"found by `{catalog.ANCHOR_SOURCE}`" in body
+def test_golden_pr_body_states_the_many_ingested_findings_honestly() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    body = render_pr_body(final)
+    assert f"**Selected** 1 of {len(final['findings'])} ingested findings" in body
+    assert "found by `ave:llm-finder`" in body

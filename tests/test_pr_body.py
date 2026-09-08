@@ -239,9 +239,11 @@ def test_unfilled_fact_renders_unproven() -> None:
 def test_still_open_draws_from_run_findings_not_the_answer_key() -> None:
     body = _render_fresh()
     still_open = body[body.find("### Still open") : body.find("### Cleared")]
-    # v1 surfaces the anchor only, so the block is an honest empty — no catalog ids leak.
-    assert "surfaced no other instances" in still_open
-    assert not re.search(r"\bI-0[1-35-9]\b", still_open)
+    # The LLM finder (ticket 25) rediscovers many gaps; the ones the run did not drive are
+    # listed here from the run's own findings — attributed to the model, never the answer
+    # key: no catalog I-0x id leaks into the reviewer-facing body.
+    assert "`ave:llm-finder`" in still_open
+    assert not re.search(r"\bI-0[0-9]\b", still_open)
 
 
 def test_before_you_merge_commands_are_runnable_and_include_the_oracle() -> None:

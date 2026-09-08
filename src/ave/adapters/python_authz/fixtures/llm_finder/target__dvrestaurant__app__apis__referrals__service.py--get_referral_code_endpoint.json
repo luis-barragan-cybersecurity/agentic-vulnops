@@ -1,0 +1,40 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/referrals/service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "model_definition",
+        "arguments": {
+          "name": "User"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/referrals/service.py:get_referral_code_endpoint",
+          "is_finding": true,
+          "rationale": "On the username-is-not-None branch it queries User by the caller-supplied username instead of current_user.id, so a caller reads another user's referral code (BOLA); the else branch binds to the caller and hides the gap.",
+          "kind": "object-ownership-gap",
+          "confidence": 0.85,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/referrals/service.py",
+              "start_line": 46,
+              "end_line": 46,
+              "contains": "UserModel.username == username"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

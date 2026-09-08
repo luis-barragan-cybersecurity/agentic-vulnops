@@ -14,6 +14,8 @@ picks the head; M3's triage stage slots in between the two over this same list.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ave.adapters import get_default_pack
 from ave.findings import UNATTRIBUTED_SOURCE, all_sources, attribute, merge_findings
 from ave.records.store import make_span, now_iso
@@ -33,13 +35,27 @@ def match(state: AVEState) -> AVEState:
 
     findings = merge_findings(ingested, location_key=pack.dedup_key)
     sources = sorted({source for f in ingested for source in all_sources(f)})
+    attributes: dict[str, Any] = {
+        "found": len(findings),
+        "ingested": len(ingested),
+        "sources": sources,
+    }
+    attributes.update(_find_stage_report(pack))
     return {
         "findings": findings,
-        "spans": [
-            make_span(
-                "match",
-                started,
-                {"found": len(findings), "ingested": len(ingested), "sources": sources},
-            )
-        ],
+        "spans": [make_span("match", started, attributes)],
     }
+
+
+def _find_stage_report(pack: object) -> dict[str, Any]:
+    """The find-stage coverage denominator and per-source counts, when the pack exposes a
+    finder report. Duck-typed so the core (D3) never depends on a pack's finder — a pack
+    without one simply contributes nothing here (ticket 23's `examined N of M` handoff to
+    the LLM finder, ticket 25)."""
+    reporter = getattr(pack, "last_find_report", None)
+    if not callable(reporter):
+        return {}
+    report = reporter()
+    if report is None:
+        return {}
+    return {"find_stage": report.to_attributes()}

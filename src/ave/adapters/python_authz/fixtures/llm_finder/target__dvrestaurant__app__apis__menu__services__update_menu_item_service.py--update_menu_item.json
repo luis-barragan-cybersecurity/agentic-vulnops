@@ -1,0 +1,40 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "callers_of",
+        "arguments": {
+          "symbol": "update_menu_item"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_verdict",
+        "arguments": {
+          "handler_id": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py:update_menu_item",
+          "is_finding": true,
+          "rationale": "Updates a menu item behind get_current_user only, with no role gate, so any authenticated user performs a privileged mutation delegated to utils.update_menu_item (BFLA).",
+          "kind": "function-role-gap",
+          "confidence": 0.82,
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+              "start_line": 19,
+              "end_line": 19,
+              "contains": "Depends(get_current_user)"
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}
