@@ -95,6 +95,41 @@ def _inventory(_: argparse.Namespace) -> int:
     return 0
 
 
+def _find(_: argparse.Namespace) -> int:
+    """Run the LLM finder over the inventory and show what it rediscovered (ticket 25).
+
+    Offline by default — the finder replays recorded transcripts, so this needs no model
+    access — and citation-validated at the submission boundary. This is the model layer made
+    inspectable on its own, the way `inventory` shows the deterministic layer beneath it. Set
+    `AVE_LLM_LIVE=1` to reach the live model instead of the fixtures."""
+    from ave.adapters.python_authz.code_facts import CodeFactsStore
+    from ave.adapters.python_authz.llm_finder import LLMFinder
+    from ave.adapters.python_authz.model import default_model_client
+    from ave.adapters.python_authz.pack import FIXTURES_DIR
+
+    store = CodeFactsStore.build()
+    report = LLMFinder(store, default_model_client(FIXTURES_DIR)).find()
+    if report.coverage is not None:
+        print(f"find: {report.coverage.summary()}.")
+    print(
+        f"  {len(report.findings)} findings, {len(report.cleared)} cleared, "
+        f"{len(report.rejected)} rejected verdicts (rejected, not down-weighted)."
+    )
+    for finding in report.findings:
+        evidence = finding.get("evidence", {})
+        kind = str(finding.get("kind", ""))
+        print(
+            f"  {float(finding.get('confidence', 0.0)):.2f} "
+            f"{kind:22} {finding.get('location')}"
+        )
+        rationale = evidence.get("rationale", "") if isinstance(evidence, dict) else ""
+        if rationale:
+            print(f"       {rationale}")
+    for rejection in report.rejected:
+        print(f"  rejected {rejection.handler_id}: {rejection.reason}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ave", description="Autonomous Vulnerability Eradication."
@@ -107,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         ("eradicate", _eradicate, "break -> run -> HITL approve -> PR (demo)"),
         ("scoreboard", _scoreboard, "regenerate the results table from run records"),
         ("inventory", _inventory, "deterministic find-stage inventory + coverage"),
+        ("find", _find, "run the LLM finder over the inventory (offline fixtures)"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(handler=handler)

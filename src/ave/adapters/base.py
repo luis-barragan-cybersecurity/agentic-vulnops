@@ -94,6 +94,14 @@ class LanguagePack(Protocol):
         (correctly-authorized) use of the affected endpoint."""
         ...
 
+    def can_drive(self, finding: Finding) -> bool:
+        """Whether the pack can drive `finding` to a test-verified fix *now* — i.e. it has a
+        working exploit oracle bound to it. A run ingests every finding a source produced
+        (the LLM finder returns many), but Assess drives only the highest-ranked finding
+        this returns True for, reporting the rest honestly rather than crashing on one it
+        cannot yet prove. Generated exploits (ticket 27) widen what this accepts."""
+        ...
+
 
 @runtime_checkable
 class PinnedEnvCapable(Protocol):
