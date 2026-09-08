@@ -35,6 +35,6 @@ Preconditions:
 
 - `examined 18` is the judged denominator. It includes 15 `examine` handlers and three `cheap` handlers. Only nine `drop` handlers are excluded.
 - The command does not print or persist a code-facts path.
-- The graph run still ingests only the I-04 anchor. Do not claim that `ave run` uses this store until the find stage wires it into the graph.
+- `ave run` now consumes this store through the LLM finder. Prove that path with [Run the loop](./run-stub-loop.md). Prove the inspectable model layer with [LLM finder](./find.md).
 - There is no `make inventory` target.
 - The contract test reads the catalog as its expected answer. The product scan cannot read `target/catalog.json`, `target/CATALOG.md`, or `target/dvrestaurant/app/tests/`.

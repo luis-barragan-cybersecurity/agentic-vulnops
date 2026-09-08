@@ -23,7 +23,7 @@ This directory is the maintained source for verifying AVE's user-facing CLI. Rea
 
 - Capture the command, stdout, stderr, and exit code, not only the last line.
 - CLI proof includes the four summary fields when the command runs the graph (`human_approved`, `ready_to_merge`, `pr_ref`, and `run complete`).
-- Mutation proof for `break`, `scoreboard`, and `inventory` is a clean `git status` on `README.md` and `target/`. `run` writing `results/runs/` is expected and gitignored.
+- Mutation proof for `break`, `scoreboard`, `inventory`, and `find` is a clean `git status` on `README.md` and `target/`. `run` writing `results/runs/` is expected and gitignored.
 - Record the feature ID and entry point used with every artifact.
 - Report an unreachable path with the attempted command and the unmet precondition.
 - Do not report a skipped entry point as verified through a different path.
@@ -43,6 +43,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 ## Features
 
 - [Route inventory](./inventory.md) covers the deterministic route scan, pre-filter screens, coverage denominator, and enforced source allowlist.
+- [LLM finder](./find.md) covers `ave find`, offline fixture replay, printed finding counts, and citation-boundary tests.
 - [Run the loop](./run-stub-loop.md) covers `ave run` / `make run`, finding attribution and head selection, per-finding lifecycles, auto-approve, and the local PR bundle.
 - [Pinned-environment run](./pinned-env-run.md) covers the `AVE_PINNED_ENV` opt-in, generated-patch proof, captured exchange, pinned T1, and explicit failure outcomes.
 - [Eradicate demo](./eradicate-demo.md) covers `break` then `run` as `ave eradicate` / `make eradicate`.

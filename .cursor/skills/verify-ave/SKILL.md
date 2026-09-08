@@ -1,11 +1,11 @@
 ---
 name: verify-ave
-description: Drive AVE from the CLI and Makefile. Use when proving ave/make run, inventory, the pinned-environment opt-in, eradicate, scoreboard, baseline, the HITL gate, the generated PR body, or python -m ave.invariant --check against this checkout.
+description: Drive AVE from the CLI and Makefile. Use when proving ave/make run, inventory, find, the pinned-environment opt-in, eradicate, scoreboard, baseline, the HITL gate, the generated PR body, or python -m ave.invariant --check against this checkout.
 ---
 
 # Verify AVE
 
-AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The graph, interrupt, and CI wiring are real. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` drives the in-process I-04 oracle and writes a local PR bundle under `results/runs/<id>/`. `AVE_PINNED_ENV=1` runs the I-04 capture test against the vendored target and an isolated copy with AVE's generated patch applied, both through the target's Poetry interpreter. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
+AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The graph, interrupt, and CI wiring are real. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` replays the LLM-finder fixtures, drives the I-04 location through the in-process oracle, and writes a local PR bundle under `results/runs/<id>/`. `ave find` prints that same fixture pass without walking the graph. `AVE_PINNED_ENV=1` runs the I-04 capture test against the vendored target and an isolated copy with AVE's generated patch applied, both through the target's Poetry interpreter. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
 
 The next agent to read this has never seen the app. Commands below are literal.
 
@@ -19,9 +19,9 @@ python3 -m venv .venv
 make setup
 ```
 
-Ready when `.venv/bin/python -m ave.cli --help` prints subcommands `run`, `break`, `eradicate`, `scoreboard`, and `inventory`. `make setup` is `pip install -e ".[dev]"`. Needs Python 3.11+. CI uses 3.11. This checkout also runs on 3.14.
+Ready when `.venv/bin/python -m ave.cli --help` prints subcommands `run`, `break`, `eradicate`, `scoreboard`, `inventory`, and `find`. `make setup` is `pip install -e ".[dev]"`. Needs Python 3.11+. CI uses 3.11. This checkout also runs on 3.14.
 
-No port. No seed data. `.env` is unused. LLM keys are not required. OpenTelemetry prints a JSON span to stdout on `run` and `eradicate` because `setup_tracing` always attaches `ConsoleSpanExporter`.
+No port. No seed data. `.env` is unused. LLM keys are not required. `ave find` and `ave run` replay recorded fixtures unless `AVE_LLM_LIVE` is set. OpenTelemetry prints a JSON span to stdout on `run` and `eradicate` because `setup_tracing` always attaches `ConsoleSpanExporter`.
 
 Teardown of Launch is nothing. Leave `.venv` in place. `make clean` only deletes caches (`.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `build`, `dist`, egg-info, coverage). Do not run `make clean` in the middle of a proof.
 
@@ -35,7 +35,7 @@ Run this first whenever anything looks off:
 .cursor/skills/verify-ave/control-ave doctor
 ```
 
-Stdout must contain `ok` lines for python (the repo `.venv`), `policy_version` (the `version` string from `policy.yaml`; this checkout prints `"1.0.0"`), `hitl_gate_before=prepare`, `policy_path`, `invariant`, the five CLI subcommands, and the repo path. Doctor checks the exact invariant line internally, then prints `ok invariant`. Importing the graph may print a `LangChainPendingDeprecationWarning` on stderr; ignore it. Non-zero means this checkout is not worth driving: install is missing, `policy.yaml` did not load, or the graph constant moved.
+Stdout must contain `ok` lines for python (the repo `.venv`), `policy_version` (the `version` string from `policy.yaml`; this checkout prints `"1.0.0"`), `hitl_gate_before=prepare`, `policy_path`, `invariant`, the six CLI subcommands, and the repo path. Doctor checks the exact invariant line internally, then prints `ok invariant`. Importing the graph may print a `LangChainPendingDeprecationWarning` on stderr; ignore it. Non-zero means this checkout is not worth driving: install is missing, `policy.yaml` did not load, or the graph constant moved.
 
 Doctor does not start the graph. It does not prove `ready_to_merge`.
 
@@ -49,6 +49,7 @@ Put `.cursor/skills/verify-ave` on `PATH` or invoke the script by path. Always g
 .cursor/skills/verify-ave/control-ave cli -- eradicate
 .cursor/skills/verify-ave/control-ave cli -- scoreboard
 .cursor/skills/verify-ave/control-ave cli -- inventory
+.cursor/skills/verify-ave/control-ave cli -- find
 .cursor/skills/verify-ave/control-ave make -- run
 .cursor/skills/verify-ave/control-ave make -- check
 .cursor/skills/verify-ave/control-ave make -- baseline
@@ -57,6 +58,7 @@ Put `.cursor/skills/verify-ave` on `PATH` or invoke the script by path. Always g
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_pr_body.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_many_findings.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_code_facts.py
+.cursor/skills/verify-ave/control-ave pytest -- tests/test_llm_finder.py
 AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run -- cli -- run
 ```
 
@@ -64,12 +66,15 @@ AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run --
 
 Stable handles:
 
-- CLI subcommand names: `run`, `break`, `eradicate`, `scoreboard`, `inventory`
+- CLI subcommand names: `run`, `break`, `eradicate`, `scoreboard`, `inventory`, `find`
 - Inventory summary `inventory: examined 18 of 27 handlers.`
 - Inventory screen counts `examine 15, cheap 3, dropped 9`
 - Inventory contract node `tests/test_code_facts.py` (21 tests)
+- Find summary `find: examined 18 of 27 handlers.`
+- Find counts `8 findings, 7 cleared, 0 rejected verdicts`
+- Find contract node `tests/test_llm_finder.py` (14 tests)
 - Summary lines from `ave run`: `human_approved = True`, `ready_to_merge = False`, `pr_ref` starting with `local:pr/`
-- Loop finding id `I-04` (catalog anchor; not printed by the CLI)
+- Loop finding id `ave-llm-get_order_service-get_order` (catalog location I-04; the CLI does not print I-04)
 - HITL node name `prepare` (`HITL_GATE_BEFORE`)
 - Invariant line `invariant: OK (no run records to validate yet)` (CLI still does not load `results/runs/`)
 - Pause pytest node `tests/test_graph_smoke.py::test_run_halts_at_the_hitl_gate_before_approval`
@@ -83,7 +88,7 @@ Stable handles:
 
 The CLI always calls `run_once(..., auto_approve=True)`. There is no flag to pause. To prove the gate actually stops, use the pytest node above (or `run_once(..., auto_approve=False)` in that test). Do not treat a stdout string about the HITL gate as proof of a pause. The process does not wait for a human.
 
-Read `.cursor/skills/verify-ave/features/README.md` before picking an entry point. A proof that only runs `ave run` does not cover inventory, eradicate, scoreboard, baseline, the gate, or the invariant job.
+Read `.cursor/skills/verify-ave/features/README.md` before picking an entry point. A proof that only runs `ave run` does not cover inventory, find, eradicate, scoreboard, baseline, the gate, or the invariant job.
 
 ## Evidence
 
@@ -101,8 +106,8 @@ Proof standards:
 - Capture the command, stdout, stderr, and exit code. For `run` and `eradicate`, the four summary lines are the user-visible result. The OTel JSON blob is a side effect of tracing, not the product.
 - `inventory` parses the allowlisted target application as text, prints one screen per route handler, and writes no code-facts file. Confirm the summary, the 27 handler lines, and a clean `README.md` / `target/`.
 - Check side effects, not slogans. `break` prints that the catalog is already seeded and writes nothing under `target/`. `scoreboard` prints a ticket-05 stub and does not edit the README. `run` / `eradicate` write gitignored files under `results/runs/<id>/`. Confirm `git -C <repo> status --porcelain -- README.md target` stays empty.
-- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 1 ingested finding`, names `ave:pack-anchor`, quotes the rank function, keeps only T1 green, and reports readiness `no`. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison.
-- The live pack still emits one finding. Inspect the run record for Match `found: 1`, `ingested: 1`, and `sources: ["ave:pack-anchor"]`. Assess records the selected I-04 rationale. The single lifecycle stays `open`. Use `tests/test_many_findings.py` for the synthetic multi-source contract. Do not claim that a live finder produced several findings.
+- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, quotes the rank function, keeps only T1 green, and reports readiness `no`. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison.
+- The live pack emits eight findings from fixture replay. Inspect the run record for Match `found: 8`, `ingested: 8`, and `sources: ["ave:llm-finder"]`. Assess drives `ave-llm-get_order_service-get_order` (the I-04 location) and records the other seven as deferred. All eight lifecycles stay `open`. Only the driven finding has `triaged_at` set. Use `tests/test_many_findings.py` for the multi-source fold and `tests/test_llm_finder.py` for fixture recall. Do not report those eight findings as a live-model result.
 - An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE ran the same capture test against the original target and an isolated copy after applying the generated patch. The tracked target remains unchanged.
 - A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `not_flipped`, `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.
 - `make baseline` is a separate pattern-scanner comparator. It may run live Semgrep and refresh `semgrep-findings.json`, or replay that committed file when Semgrep is unavailable; both paths rewrite `results.json`. `control-ave` keeps Semgrep's log and settings under this skill's ignored artifacts directory so a sandboxed drive does not need write access to `~/.semgrep`. Record the source line and pre-drive status of `evals/baseline/semgrep/`.
