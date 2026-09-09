@@ -28,7 +28,14 @@ from ave.adapters.base import FindingBatch, PinnedExploitResult, PreparedFix
 from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
 from ave.adapters.python_authz.code_facts import CodeFactsStore
-from ave.adapters.python_authz.llm_finder import LLMFinder
+from ave.adapters.python_authz.cull import (
+    attach_review,
+    cull_attributes,
+    location_key,
+    partition_batch,
+    review_accepted,
+)
+from ave.adapters.python_authz.llm_finder import AcceptedCandidate, LLMFinder
 from ave.adapters.python_authz.model import default_model_client
 from ave.state import Finding
 
@@ -36,6 +43,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 #: The LLM finder's recorded transcripts — replayed offline so `find()` (and `make check`)
 #: need no model access; the live model is reached only on `AVE_LLM_LIVE` (see `model`).
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_finder"
+CULL_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_cull"
 _GET_ORDER = (
     _REPO_ROOT
     / "target"
@@ -108,17 +116,36 @@ class PythonAuthzPack:
     name = "python_authz"
 
     def find(self, target_ref: str) -> FindingBatch:
-        """Run the model finder and return one batch: kept findings, suppressed findings,
-        and the JSON-ready find-stage report. Offline by default. The finding at the
-        anchor location is enriched with the loop's hermetic oracle so it stays drivable;
-        the finder never reads that binding (or the answer key) to detect it.
+        """Run the model finder, then one adversarial session per accepted finding.
+
+        Offline by default. The finding at the anchor location is enriched with the
+        loop's hermetic oracle before the cull, so a valid suppress cannot overturn a
+        bound oracle. The finder and the cull never read that binding (or the answer
+        key) to detect it.
         """
         del target_ref
         store = CodeFactsStore.build()
-        finder = LLMFinder(store, default_model_client(FIXTURES_DIR))
-        report = finder.find()
-        kept = tuple(_bind_anchor(finding) for finding in report.findings)
-        return FindingBatch(kept=kept, suppressed=(), report=report.to_attributes())
+        finder_client = default_model_client(FIXTURES_DIR)
+        cull_client = default_model_client(CULL_FIXTURES_DIR)
+        report = LLMFinder(store, finder_client).find()
+        accepted = [
+            AcceptedCandidate(record=candidate.record, finding=_bind_anchor(candidate.finding))
+            for candidate in report.accepted
+        ]
+        reviews = review_accepted(store, accepted, cull_client)
+        by_key = {(review.location_key, review.kind): review for review in reviews}
+        findings = [candidate.finding for candidate in accepted]
+        kept, suppressed = partition_batch(findings, reviews)
+        kept = tuple(
+            attach_review(
+                finding,
+                by_key.get((location_key(finding), str(finding.get("kind", "")))),
+            )
+            for finding in kept
+        )
+        attrs = report.to_attributes()
+        attrs["cull"] = cull_attributes(reviews, client_mode=cull_client.name)
+        return FindingBatch(kept=kept, suppressed=suppressed, report=attrs)
 
     def dedup_key(self, finding: Finding) -> str:
         """`file:symbol` as this pack reports locations. A trailing numeric component is

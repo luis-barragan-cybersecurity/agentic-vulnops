@@ -296,13 +296,12 @@ class AnthropicModelClient:
 
 
 def default_model_client(fixtures_dir: Path) -> ModelClient:
-    """The client the finder uses unless handed another: the recorded fixtures, offline, by
+    """The client a pack stage uses unless handed another: recorded fixtures, offline, by
     default; the live model only when `AVE_LLM_LIVE` is set truthy. When both live and a
-    record directory (`AVE_LLM_RECORD`) are set, live turns are written back as fresh
-    fixtures."""
+    record directory (`AVE_LLM_RECORD`) are set, live turns are written under
+    ``<AVE_LLM_RECORD>/<fixtures_dir.name>`` so finder and cull recordings stay apart."""
     if os.environ.get(LIVE_ENV, "").strip().lower() in ("1", "true", "yes"):
         record = os.environ.get(RECORD_ENV, "").strip()
-        return AnthropicModelClient(
-            record_dir=Path(record) if record else None,
-        )
+        record_dir = Path(record) / fixtures_dir.name if record else None
+        return AnthropicModelClient(record_dir=record_dir)
     return FixtureModelClient(fixtures_dir=fixtures_dir)

@@ -1,0 +1,45 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_review",
+        "arguments": {
+          "location": "app/apis/orders/services/get_order_service.py:get_order",
+          "kind": "object-ownership-gap",
+          "stance": "keep",
+          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+              "start_line": 17,
+              "end_line": 17,
+              "contains": "Order.id == order_id"
+            }
+          ],
+          "hypotheses": [
+            {
+              "kind": "ruled_out",
+              "claim": "A post-fetch ownership guard binds db_order to current_user on every path",
+              "cited_spans": [
+                {
+                  "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                  "start_line": 20,
+                  "end_line": 20,
+                  "contains": "return db_order"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

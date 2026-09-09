@@ -282,6 +282,11 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     # Ticket 23's handoff: the find span now carries the coverage denominator.
     assert "coverage" in match["attributes"]["find_stage"]
     assert match["attributes"]["find_stage"]["coverage"]["summary"].startswith("examined ")
+    cull = match["attributes"]["find_stage"]["cull"]
+    assert cull["reviewed"] == len(final["findings"])
+    assert cull["suppressed"] == 0
+    assert cull["fail_open"] == 0
+    assert cull["client"] == "fixture"
     assess = next(s for s in final["spans"] if s["phase"] == "assess")
     assert assess["attributes"]["selection"]["rank_function"] == RANK_FUNCTION
 
@@ -312,6 +317,24 @@ def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:
         assert by_id[other].verified_at is None
         assert by_id[other].first_observed_at == by_id[driven_id].first_observed_at
     json.dumps(record.findings[0].__dict__)  # serialisable, like the persisted record
+
+
+def test_suppressed_findings_are_false_positives_triaged_at_match() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    extra = _finding("FP-1", location="app/a.py:one", source="ave:llm-finder")
+    match = next(s for s in final["spans"] if s["phase"] == "match")
+    state = cast(
+        "AVEState",
+        {**final, "suppressed_findings": [extra], "spans": final["spans"]},
+    )
+    record = build_run_record(state)
+    by_id = {lc.finding_id: lc for lc in record.findings}
+    assert by_id["FP-1"].outcome == "false_positive"
+    assert by_id["FP-1"].triaged_at == match["ended_at"]
+    assert by_id["FP-1"].verified_at is None
+    body = render_pr_body(state)
+    still_open = body[body.find("### Still open") : body.find("### Cleared")]
+    assert "`FP-1`" not in still_open
 
 
 def test_pr_body_says_which_of_many_was_selected_and_lists_the_rest_still_open() -> None:

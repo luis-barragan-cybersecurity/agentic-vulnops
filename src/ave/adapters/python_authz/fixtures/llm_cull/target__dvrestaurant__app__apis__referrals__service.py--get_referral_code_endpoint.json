@@ -1,0 +1,45 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/referrals/service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_review",
+        "arguments": {
+          "location": "app/apis/referrals/service.py:get_referral_code_endpoint",
+          "kind": "object-ownership-gap",
+          "stance": "keep",
+          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/referrals/service.py",
+              "start_line": 46,
+              "end_line": 46,
+              "contains": "UserModel.username == username"
+            }
+          ],
+          "hypotheses": [
+            {
+              "kind": "ruled_out",
+              "claim": "Referral code lookup always uses current_user.id",
+              "cited_spans": [
+                {
+                  "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                  "start_line": 46,
+                  "end_line": 46,
+                  "contains": "UserModel.username == username"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

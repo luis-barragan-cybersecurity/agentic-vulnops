@@ -1,12 +1,12 @@
 {
-  "run_id": "e8dffbf8e6f34b82896bae8c93dd0ba4",
+  "run_id": "4ade30d1f45f47658a8a9ef002d12f91",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-08T01:49:38.552483+00:00",
-      "ended_at": "2026-09-08T01:49:38.560002+00:00",
+      "started_at": "2026-09-09T01:44:53.573125+00:00",
+      "ended_at": "2026-09-09T01:44:53.584580+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,14 +14,15 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-08T01:49:38.560737+00:00",
-      "ended_at": "2026-09-08T01:49:38.672724+00:00",
+      "started_at": "2026-09-09T01:44:53.585303+00:00",
+      "ended_at": "2026-09-09T01:44:53.723219+00:00",
       "attributes": {
         "found": 8,
         "ingested": 8,
         "sources": [
           "ave:llm-finder"
         ],
+        "suppressed": 0,
         "find_stage": {
           "finder": "llm",
           "found": 8,
@@ -45,14 +46,516 @@
               "examine": 15
             },
             "summary": "examined 18 of 27 handlers"
+          },
+          "cull": {
+            "reviewed": 8,
+            "kept": 8,
+            "suppressed": 0,
+            "fail_open": 0,
+            "bound_oracle_overrides": 0,
+            "client": "fixture",
+            "prompt_versions": {
+              "python_authz.llm_cull.system": 1,
+              "python_authz.llm_cull.candidate": 1
+            },
+            "reviews": [
+              {
+                "location_key": "app/apis/auth/services/update_profile_service.py:update_profile",
+                "kind": "object-ownership-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+                      "start_line": 27,
+                      "end_line": 27,
+                      "contains": "get_user_by_username(db, user.username)"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "The profile update operates only on current_user",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+                          "start_line": 27,
+                          "end_line": 27,
+                          "contains": "get_user_by_username(db, user.username)"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+                    "start_line": 27,
+                    "end_line": 27,
+                    "contains": "get_user_by_username(db, user.username)"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "The profile update operates only on current_user",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
+                        "start_line": 27,
+                        "end_line": 27,
+                        "contains": "get_user_by_username(db, user.username)"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/menu/services/delete_menu_item_service.py:delete_menu_item",
+                "kind": "function-role-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
+                      "start_line": 15,
+                      "end_line": 15,
+                      "contains": "Depends(get_current_user)"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "A RolesBasedAuthChecker role gate protects this mutation",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
+                          "start_line": 15,
+                          "end_line": 15,
+                          "contains": "Depends(get_current_user)"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
+                    "start_line": 15,
+                    "end_line": 15,
+                    "contains": "Depends(get_current_user)"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "A RolesBasedAuthChecker role gate protects this mutation",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
+                        "start_line": 15,
+                        "end_line": 15,
+                        "contains": "Depends(get_current_user)"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/menu/services/update_menu_item_service.py:update_menu_item",
+                "kind": "function-role-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+                      "start_line": 19,
+                      "end_line": 19,
+                      "contains": "Depends(get_current_user)"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "A RolesBasedAuthChecker role gate protects this mutation",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+                          "start_line": 19,
+                          "end_line": 19,
+                          "contains": "Depends(get_current_user)"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+                    "start_line": 19,
+                    "end_line": 19,
+                    "contains": "Depends(get_current_user)"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "A RolesBasedAuthChecker role gate protects this mutation",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
+                        "start_line": 19,
+                        "end_line": 19,
+                        "contains": "Depends(get_current_user)"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/orders/services/get_order_service.py:get_order",
+                "kind": "object-ownership-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                      "start_line": 17,
+                      "end_line": 17,
+                      "contains": "Order.id == order_id"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "A post-fetch ownership guard binds db_order to current_user on every path",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                          "start_line": 20,
+                          "end_line": 20,
+                          "contains": "return db_order"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                    "start_line": 17,
+                    "end_line": 17,
+                    "contains": "Order.id == order_id"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "A post-fetch ownership guard binds db_order to current_user on every path",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                        "start_line": 20,
+                        "end_line": 20,
+                        "contains": "return db_order"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/orders/services/get_orders_for_delivery_service.py:get_orders",
+                "kind": "function-role-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+                      "start_line": 30,
+                      "end_line": 30,
+                      "contains": "db.query(Order)"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "Listing orders for delivery requires a staff role",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+                          "start_line": 30,
+                          "end_line": 30,
+                          "contains": "db.query(Order)"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+                    "start_line": 30,
+                    "end_line": 30,
+                    "contains": "db.query(Order)"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "Listing orders for delivery requires a staff role",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+                        "start_line": 30,
+                        "end_line": 30,
+                        "contains": "db.query(Order)"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/referrals/service.py:get_discount_coupons",
+                "kind": "object-ownership-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                      "start_line": 91,
+                      "end_line": 91,
+                      "contains": "user_id if user_id is not None else current_user.id"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "Coupon listing always binds to current_user.id",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                          "start_line": 91,
+                          "end_line": 91,
+                          "contains": "user_id if user_id is not None else current_user.id"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                    "start_line": 91,
+                    "end_line": 91,
+                    "contains": "user_id if user_id is not None else current_user.id"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "Coupon listing always binds to current_user.id",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                        "start_line": 91,
+                        "end_line": 91,
+                        "contains": "user_id if user_id is not None else current_user.id"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/referrals/service.py:get_referral_code_endpoint",
+                "kind": "object-ownership-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                      "start_line": 46,
+                      "end_line": 46,
+                      "contains": "UserModel.username == username"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "Referral code lookup always uses current_user.id",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                          "start_line": 46,
+                          "end_line": 46,
+                          "contains": "UserModel.username == username"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                    "start_line": 46,
+                    "end_line": 46,
+                    "contains": "UserModel.username == username"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "Referral code lookup always uses current_user.id",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/referrals/service.py",
+                        "start_line": 46,
+                        "end_line": 46,
+                        "contains": "UserModel.username == username"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              },
+              {
+                "location_key": "app/apis/users/services/update_user_role_service.py:update_user_role",
+                "kind": "function-role-gap",
+                "source": "ave:llm-finder",
+                "submitted": {
+                  "stance": "keep",
+                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "citations": [
+                    {
+                      "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+                      "start_line": 26,
+                      "end_line": 26,
+                      "contains": "update_user(db, user.username, user)"
+                    }
+                  ],
+                  "hypotheses": [
+                    {
+                      "kind": "ruled_out",
+                      "claim": "Only an administrator can change another user's role",
+                      "citations": [
+                        {
+                          "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+                          "start_line": 26,
+                          "end_line": 26,
+                          "contains": "update_user(db, user.username, user)"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "effective": "keep",
+                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "citations": [
+                  {
+                    "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+                    "start_line": 26,
+                    "end_line": 26,
+                    "contains": "update_user(db, user.username, user)"
+                  }
+                ],
+                "hypotheses": [
+                  {
+                    "kind": "ruled_out",
+                    "claim": "Only an administrator can change another user's role",
+                    "citations": [
+                      {
+                        "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
+                        "start_line": 26,
+                        "end_line": 26,
+                        "contains": "update_user(db, user.username, user)"
+                      }
+                    ]
+                  }
+                ],
+                "basis": "validated",
+                "prompt_versions": {
+                  "python_authz.llm_cull.system": 1,
+                  "python_authz.llm_cull.candidate": 1
+                },
+                "client_mode": "fixture"
+              }
+            ]
           }
         }
       }
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-08T01:49:38.673542+00:00",
-      "ended_at": "2026-09-08T01:49:38.673581+00:00",
+      "started_at": "2026-09-09T01:44:53.723912+00:00",
+      "ended_at": "2026-09-09T01:44:53.723957+00:00",
       "attributes": {
         "selected": true,
         "selection": {
@@ -151,8 +654,8 @@
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-08T01:49:38.674517+00:00",
-      "ended_at": "2026-09-08T01:49:38.677143+00:00",
+      "started_at": "2026-09-09T01:44:53.725082+00:00",
+      "ended_at": "2026-09-09T01:44:53.729705+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -161,24 +664,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-08T01:49:38.684842+00:00",
-      "ended_at": "2026-09-08T01:49:38.685026+00:00",
+      "started_at": "2026-09-09T01:44:53.732642+00:00",
+      "ended_at": "2026-09-09T01:44:53.732769+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-08T01:49:38.686345+00:00",
-      "ended_at": "2026-09-08T01:49:38.686352+00:00",
+      "started_at": "2026-09-09T01:44:53.733375+00:00",
+      "ended_at": "2026-09-09T01:44:53.733380+00:00",
       "attributes": {
-        "pr_ref": "local:pr/e8dffbf8e6f34b82896bae8c93dd0ba4"
+        "pr_ref": "local:pr/4ade30d1f45f47658a8a9ef002d12f91"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-08T01:49:38.687500+00:00",
-      "ended_at": "2026-09-08T01:49:38.687524+00:00",
+      "started_at": "2026-09-09T01:44:53.734346+00:00",
+      "ended_at": "2026-09-09T01:44:53.734362+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -188,7 +691,7 @@
   "findings": [
     {
       "finding_id": "ave-llm-update_profile_service-update_profile",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -196,7 +699,7 @@
     },
     {
       "finding_id": "ave-llm-delete_menu_item_service-delete_menu_item",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -204,7 +707,7 @@
     },
     {
       "finding_id": "ave-llm-update_menu_item_service-update_menu_item",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -212,15 +715,15 @@
     },
     {
       "finding_id": "ave-llm-get_order_service-get_order",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
-      "triaged_at": "2026-09-08T01:49:38.674517+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "triaged_at": "2026-09-09T01:44:53.725082+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
     },
     {
       "finding_id": "ave-llm-get_orders_for_delivery_service-get_orders",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -228,7 +731,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_discount_coupons",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -236,7 +739,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_referral_code_endpoint",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -244,7 +747,7 @@
     },
     {
       "finding_id": "ave-llm-update_user_role_service-update_user_role",
-      "first_observed_at": "2026-09-08T01:49:38.552483+00:00",
+      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",

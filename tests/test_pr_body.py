@@ -268,6 +268,61 @@ def test_unmeasured_counts_sit_in_a_small_table_against_policy_limits() -> None:
     assert "| Routes affected | unmeasured | 15 |" in radius
 
 
+def test_cleared_comes_from_validated_ruled_out_on_the_selected_finding() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    body = render_pr_body(final)
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    selected = final["selected_finding"]
+    hyps = selected["evidence"]["counter_review"]["hypotheses"]
+    ruled_out = next(h["claim"] for h in hyps if h["kind"] == "ruled_out")
+    assert "| Ruled out | How |" in cleared
+    assert ruled_out in cleared
+    assert "get_order_status" not in cleared
+    assert "patch_profile" not in cleared
+    for finding in final.get("suppressed_findings") or []:
+        assert str(finding.get("id")) not in cleared
+
+
+def test_cleared_stays_honest_empty_without_validated_ruled_out() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    selected = dict(final["selected_finding"])
+    evidence = dict(selected.get("evidence") or {})
+    evidence["counter_review"] = {"basis": "fail_open_missing", "hypotheses": []}
+    selected["evidence"] = evidence
+    body = render_pr_body({**final, "selected_finding": selected})
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    assert "Nothing was checked-and-ruled-out by this run, so nothing is listed." in cleared
+    assert "| Ruled out | How |" not in cleared
+
+
+def test_cleared_table_escapes_model_authored_cells() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    selected = dict(final["selected_finding"])
+    evidence = dict(selected.get("evidence") or {})
+    evidence["counter_review"] = {
+        "basis": "validated",
+        "hypotheses": [
+            {
+                "kind": "ruled_out",
+                "claim": "guarded | <script>alert(1)</script>\nnext",
+                "citations": [
+                    {
+                        "file": "app/x.py",
+                        "start_line": 1,
+                        "contains": "a | b",
+                    }
+                ],
+            }
+        ],
+    }
+    selected["evidence"] = evidence
+    body = render_pr_body({**final, "selected_finding": selected})
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    assert "guarded \\| &lt;script&gt;alert(1)&lt;/script&gt; next" in cleared
+    assert "<script>" not in cleared
+    assert "\nnext" not in cleared.split("### Cleared", 1)[1]
+
+
 def test_policy_limits_fail_closed_when_versions_differ() -> None:
     state = run_once(_INITIAL, auto_approve=True)
     body = render_pr_body({**state, "policy_version": "0.9.0"})

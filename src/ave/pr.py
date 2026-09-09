@@ -404,21 +404,55 @@ def _still_open(
     return lines
 
 
-def _cleared(blast: dict[str, Any]) -> list[str]:
+def _escape_md_cell(value: object) -> str:
+    """Escape model-authored table cells so pipes, newlines, and raw HTML cannot break
+    the PR body. Citation validation does not make Markdown safe."""
+    text = str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    return text.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _ruled_out_rows(finding: dict[str, Any]) -> list[tuple[str, str]]:
+    """Validated ruled-out hypotheses on the selected kept finding only.
+
+    Finder-cleared handler ids and suppressed siblings never enter this projection.
+    """
+    evidence = finding.get("evidence")
+    review = evidence.get("counter_review") if isinstance(evidence, dict) else None
+    if not isinstance(review, dict) or review.get("basis") != "validated":
+        return []
+    rows: list[tuple[str, str]] = []
+    for hypothesis in review.get("hypotheses") or []:
+        if not isinstance(hypothesis, dict) or hypothesis.get("kind") != "ruled_out":
+            continue
+        claim = str(hypothesis.get("claim", "")).strip()
+        if not claim:
+            continue
+        rows.append((claim, _hypothesis_how(hypothesis)))
+    return rows
+
+
+def _hypothesis_how(hypothesis: dict[str, Any]) -> str:
+    citations = hypothesis.get("citations") or []
+    if not isinstance(citations, list) or not citations:
+        return "cited at the cull boundary"
+    first = citations[0] if isinstance(citations[0], dict) else {}
+    file = first.get("file", "?")
+    start = first.get("start_line", "?")
+    contains = first.get("contains", "")
+    return f"`{file}:{start}` — {contains}"
+
+
+def _cleared(finding: dict[str, Any]) -> list[str]:
     lines = ["### Cleared", ""]
-    cleared = blast.get("cleared")
-    if isinstance(cleared, list) and cleared:
+    rows = _ruled_out_rows(finding)
+    if rows:
         lines.append("| Ruled out | How |")
         lines.append("|---|---|")
-        for item in cleared:
-            if isinstance(item, dict):
-                lines.append(
-                    f"| {item.get('ruled_out', '?')} | {item.get('how', '?')} |"
-                )
+        for ruled_out, how in rows:
+            lines.append(f"| {_escape_md_cell(ruled_out)} | {_escape_md_cell(how)} |")
     else:
         lines.append(
-            "Nothing was checked-and-ruled-out by this run, so nothing is listed. "
-            "(Fills with the find-stage blast-radius pass.)"
+            "Nothing was checked-and-ruled-out by this run, so nothing is listed."
         )
     lines.append("")
     return lines
@@ -460,7 +494,7 @@ def _blast_radius_blocks(
     lines.append("")
     lines.extend(_one_fact(blast))
     lines.extend(_still_open(findings, finding))
-    lines.extend(_cleared(blast))
+    lines.extend(_cleared(finding))
     lines.extend(_before_you_merge(blast))
     return lines
 

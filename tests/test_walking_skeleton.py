@@ -73,7 +73,8 @@ def test_pr_bundle_written_with_patch_and_verdict(tmp_path: Path) -> None:
     body = artifacts["pr_body"].read_text()
     assert "Ready to merge: no" in body
     assert "object-ownership-gap (BOLA)" not in body
-    assert "ownership guard" not in body
+    assert "| Ruled out | How |" in body
+    assert "already has an ownership guard" not in body.lower()
     assert "```diff" in body
     assert "Not an applicable diff" not in body
     patch = artifacts["patch"].read_text()
