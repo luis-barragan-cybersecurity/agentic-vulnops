@@ -88,8 +88,32 @@ def merge_findings(
         primary = str(winner.get("source") or UNATTRIBUTED_SOURCE)
         folded = set(winner.get("corroborated_by", [])) | set(all_sources(loser))
         folded.discard(primary)
-        winners[key] = cast("Finding", {**winner, "corroborated_by": sorted(folded)})
+        merged: dict[str, Any] = {**winner, "corroborated_by": sorted(folded)}
+        evidence = _union_evidence(winner, loser)
+        if evidence is not None:
+            merged["evidence"] = evidence
+        winners[key] = cast("Finding", merged)
     return [winners[key] for key in order]
+
+
+def _union_evidence(winner: Finding, loser: Finding) -> dict[str, Any] | None:
+    """Key-agnostic union. The confidence winner keeps conflicting values.
+
+    Loser-only keys (reachable when a higher-confidence duplicate omits oracle
+    metadata) survive. Conflicting opaque values are not claimed to be monotonic.
+    """
+    winner_ev = winner.get("evidence")
+    loser_ev = loser.get("evidence")
+    winner_dict = dict(winner_ev) if isinstance(winner_ev, dict) else {}
+    loser_dict = loser_ev if isinstance(loser_ev, dict) else {}
+    if not winner_dict and not loser_dict:
+        return None
+    merged = dict(winner_dict)
+    if isinstance(loser_dict, dict):
+        for key, value in loser_dict.items():
+            if key not in merged:
+                merged[key] = value
+    return merged
 
 
 def rank_findings(

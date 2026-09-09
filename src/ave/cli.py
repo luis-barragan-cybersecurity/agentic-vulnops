@@ -96,26 +96,26 @@ def _inventory(_: argparse.Namespace) -> int:
 
 
 def _find(_: argparse.Namespace) -> int:
-    """Run the LLM finder over the inventory and show what it rediscovered (ticket 25).
+    """Run the pack-owned find operation and show what it rediscovered (ticket 25/26).
 
-    Offline by default — the finder replays recorded transcripts, so this needs no model
-    access — and citation-validated at the submission boundary. This is the model layer made
-    inspectable on its own, the way `inventory` shows the deterministic layer beneath it. Set
-    `AVE_LLM_LIVE=1` to reach the live model instead of the fixtures."""
-    from ave.adapters.python_authz.code_facts import CodeFactsStore
-    from ave.adapters.python_authz.llm_finder import LLMFinder
-    from ave.adapters.python_authz.model import default_model_client
-    from ave.adapters.python_authz.pack import FIXTURES_DIR
+    This is the same `LanguagePack.find()` path Match walks. Offline by default — the
+    finder replays recorded transcripts, so this needs no model access — and
+    citation-validated at the submission boundary. Set `AVE_LLM_LIVE=1` to reach the
+    live model instead of the fixtures."""
+    from ave.adapters import get_default_pack
 
-    store = CodeFactsStore.build()
-    report = LLMFinder(store, default_model_client(FIXTURES_DIR)).find()
-    if report.coverage is not None:
-        print(f"find: {report.coverage.summary()}.")
+    batch = get_default_pack().find(str(initial_run_state().get("target_ref", "unset")))
+    coverage = batch.report.get("coverage")
+    if isinstance(coverage, dict) and coverage.get("summary"):
+        print(f"find: {coverage['summary']}.")
     print(
-        f"  {len(report.findings)} findings, {len(report.cleared)} cleared, "
-        f"{len(report.rejected)} rejected verdicts (rejected, not down-weighted)."
+        f"  {len(batch.kept)} findings, {batch.report.get('cleared', 0)} cleared, "
+        f"{batch.report.get('rejected', 0)} rejected verdicts "
+        "(rejected, not down-weighted)."
     )
-    for finding in report.findings:
+    if batch.suppressed:
+        print(f"  {len(batch.suppressed)} suppressed by adversarial cull.")
+    for finding in batch.kept:
         evidence = finding.get("evidence", {})
         kind = str(finding.get("kind", ""))
         print(
@@ -125,8 +125,8 @@ def _find(_: argparse.Namespace) -> int:
         rationale = evidence.get("rationale", "") if isinstance(evidence, dict) else ""
         if rationale:
             print(f"       {rationale}")
-    for rejection in report.rejected:
-        print(f"  rejected {rejection.handler_id}: {rejection.reason}")
+    for finding in batch.suppressed:
+        print(f"  suppressed {finding.get('id')} {finding.get('location')}")
     return 0
 
 

@@ -117,17 +117,33 @@ class Rejection:
 
 
 @dataclass(frozen=True)
-class FindReport:
-    """Everything one finder pass produced: the accepted findings, the candidates cleared as
-    benign, the rejected verdicts, and the coverage denominator. The pack turns `findings`
-    into the run's finding list and attaches `coverage`/`by_source` to the Match span."""
+class AcceptedCandidate:
+    """A minted finding paired with the inventory record it was judged against.
 
-    findings: list[Finding]
+    Cull sessions consume these pairs so accepted identity stays the trusted record,
+    not a later lookup through a compatibility findings view.
+    """
+
+    record: InventoryRecord
+    finding: Finding
+
+
+@dataclass(frozen=True)
+class FindReport:
+    """Everything one finder pass produced: the accepted pairs, the candidates cleared as
+    benign, the rejected verdicts, and the coverage denominator. `findings` is a
+    compatibility view; cull receives `accepted`."""
+
+    accepted: list[AcceptedCandidate] = field(default_factory=list)
     cleared: list[str] = field(default_factory=list)
     rejected: list[Rejection] = field(default_factory=list)
     budget_exhausted: list[str] = field(default_factory=list)
     coverage: Coverage | None = None
     prompt_versions: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def findings(self) -> list[Finding]:
+        return [candidate.finding for candidate in self.accepted]
 
     def by_source(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -251,7 +267,7 @@ class LLMFinder:
     budget: int = DEFAULT_CALL_BUDGET
 
     def find(self) -> FindReport:
-        findings: list[Finding] = []
+        accepted: list[AcceptedCandidate] = []
         cleared: list[str] = []
         rejected: list[Rejection] = []
         exhausted: list[str] = []
@@ -272,10 +288,10 @@ class LLMFinder:
             if finding is None:
                 cleared.append(record.handler_id)
             else:
-                findings.append(finding)
-        findings.sort(key=lambda f: str(f.get("location", "")))
+                accepted.append(AcceptedCandidate(record=record, finding=finding))
+        accepted.sort(key=lambda candidate: str(candidate.finding.get("location", "")))
         return FindReport(
-            findings=findings,
+            accepted=accepted,
             cleared=cleared,
             rejected=rejected,
             budget_exhausted=exhausted,

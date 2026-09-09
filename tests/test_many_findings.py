@@ -3,10 +3,8 @@
 Guards the run shape the find-stage design fixed: every finding names its source, findings
 from different sources that name the same flaw merge into one keeping both sources, a
 thin *stated* rank function picks the head and says why, and every ingested finding gets
-an honest lifecycle in the run record. The end-to-end run still ingests exactly one
-finding (the pack claims only the loop anchor, ticket 04's honesty fix), so multiplicity is
-proven here with synthetic multi-source findings; real multiplicity arrives with the LLM
-finder.
+an honest lifecycle in the run record. The live pack now returns many LLM-finder findings
+in one `FindingBatch`; suppressed findings stay off the ranking list.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from ave.adapters import LanguagePack, get_default_pack
+from ave.adapters import FindingBatch, LanguagePack, get_default_pack
 from ave.adapters.python_authz import catalog
 from ave.findings import (
     RANK_FUNCTION,
@@ -112,6 +110,40 @@ def test_same_location_different_kind_does_not_merge() -> None:
     assert len(merge_findings([bola, bfla], location_key=_by_location)) == 2
 
 
+def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
+    """A higher-confidence duplicate can omit oracle keys the loser already bound.
+
+    The winner keeps conflicting values. Loser-only keys survive. This does not claim
+    that conflicting opaque evidence is monotonic.
+    """
+    winner = _finding(
+        "high",
+        confidence=0.9,
+        source="ave:llm",
+        evidence={"rationale": "from winner"},
+    )
+    loser = _finding(
+        "low",
+        confidence=0.4,
+        source="sarif:tool",
+        evidence={
+            "rationale": "from loser",
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+            "is_loop_anchor": True,
+        },
+    )
+    merged = merge_findings([loser, winner], location_key=_by_location)
+    assert merged[0]["id"] == "high"
+    evidence = merged[0]["evidence"]
+    assert evidence["rationale"] == "from winner"
+    assert evidence["oracle"] == {
+        "path": "app/tests/x.py",
+        "test": "t",
+        "polarity": "inverted",
+    }
+    assert evidence["is_loop_anchor"] is True
+
+
 def test_merge_preserves_ingest_order_and_folds_transitively() -> None:
     a = _finding("a", location="f.py:one", confidence=0.5, source="s1")
     b = _finding("b", location="f.py:two", confidence=0.5, source="s2")
@@ -129,6 +161,17 @@ def test_dedup_key_is_on_the_seam_and_the_default_pack_still_satisfies_it() -> N
     pack = get_default_pack()
     assert isinstance(pack, LanguagePack)
     assert hasattr(pack, "dedup_key")
+
+
+def test_pack_find_returns_a_batch_and_has_no_report_side_channel() -> None:
+    pack = get_default_pack()
+    assert not hasattr(pack, "last_find_report")
+    batch = pack.find("target/dvrestaurant@d32d0997")
+    assert isinstance(batch, FindingBatch)
+    assert len(batch.kept) > 1
+    assert batch.suppressed == ()
+    assert batch.report["finder"] == "llm"
+    assert batch.report["found"] == len(batch.kept)
 
 
 def test_pack_dedup_key_reads_file_and_symbol() -> None:
@@ -234,6 +277,8 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     match = next(s for s in final["spans"] if s["phase"] == "match")
     assert match["attributes"]["found"] == len(final["findings"])
     assert match["attributes"]["sources"] == ["ave:llm-finder"]
+    assert match["attributes"]["suppressed"] == 0
+    assert final.get("suppressed_findings") == []
     # Ticket 23's handoff: the find span now carries the coverage denominator.
     assert "coverage" in match["attributes"]["find_stage"]
     assert match["attributes"]["find_stage"]["coverage"]["summary"].startswith("examined ")

@@ -67,6 +67,15 @@ def test_every_finding_is_attributed_to_the_model() -> None:
     assert {str(f["source"]) for f in report.findings} == {LLM_FINDER_SOURCE}
 
 
+def test_accepted_candidates_pair_the_judged_record_with_the_minted_finding() -> None:
+    report = _finder().find()
+    assert report.accepted
+    assert report.findings == [candidate.finding for candidate in report.accepted]
+    for candidate in report.accepted:
+        assert candidate.record.symbol in str(candidate.finding["location"])
+        assert candidate.finding["source"] == LLM_FINDER_SOURCE
+
+
 # --- precision: the decoys that reach the model are cleared -------------------------------
 
 

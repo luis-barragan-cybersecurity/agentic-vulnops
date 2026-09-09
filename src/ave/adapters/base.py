@@ -16,11 +16,25 @@ real vendored-target catalog is ticket 04; a second-language pack is roadmap (D3
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from ave.state import Finding
 from ave.state import PinnedExploitResult as PinnedExploitResult
 from ave.state import PinnedStatus as PinnedStatus
+
+
+@dataclass(frozen=True)
+class FindingBatch:
+    """The atomic result of `LanguagePack.find()`.
+
+    `kept` is what Match ranks. `suppressed` is what the pack culled. `report` is
+    JSON-ready find-stage facts for the Match span. There is no side channel.
+    """
+
+    kept: tuple[Finding, ...]
+    suppressed: tuple[Finding, ...]
+    report: dict[str, Any]
 
 
 class PreparedFix(dict[str, Any]):
@@ -41,8 +55,9 @@ class LanguagePack(Protocol):
 
     name: str
 
-    def find(self, target_ref: str) -> list[Finding]:
-        """Surface candidate findings from the target. Neutral `Finding` records only.
+    def find(self, target_ref: str) -> FindingBatch:
+        """Surface candidate findings from the target as one batch: `kept` for ranking,
+        `suppressed` for the sidecar, and a JSON-ready `report` for the Match span.
         Every finding should carry `source`; the core stamps `unattributed` on any that
         does not, so the omission is visible rather than blank."""
         ...

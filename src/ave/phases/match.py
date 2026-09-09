@@ -7,9 +7,9 @@ and the higher confidence. The core only ever sees neutral `Finding` records.
 
 Sources today: whatever Intake already placed in `state["findings"]` (nothing yet — an
 external SARIF feed lands there when intake grows one) and the pack's own `find()`, which
-still declares only the loop anchor (ticket 04's honesty fix), so a run still ingests
-exactly one finding. Many findings in, one remediated out: Assess ranks this batch and
-picks the head; M3's triage stage slots in between the two over this same list.
+returns one `FindingBatch`. Match puts `kept` in `AVEState.findings`, `suppressed` in
+`AVEState.suppressed_findings`, and the batch report on the Match span. Assess ranks the
+kept batch and picks the head.
 """
 
 from __future__ import annotations
@@ -26,36 +26,24 @@ def match(state: AVEState) -> AVEState:
     started = now_iso()
     pack = get_default_pack()
     target_ref = state.get("target_ref", "unset")
+    batch = pack.find(target_ref)
 
-    # Every source, in ingest order. A producer that forgot to stamp its source shows up
-    # as `unattributed` rather than blank, so the omission is visible in the run record.
     ingested: list[Finding] = []
-    for produced in (state.get("findings") or [], pack.find(target_ref)):
+    for produced in (state.get("findings") or [], batch.kept):
         ingested.extend(attribute(produced, default_source=UNATTRIBUTED_SOURCE))
 
     findings = merge_findings(ingested, location_key=pack.dedup_key)
     sources = sorted({source for f in ingested for source in all_sources(f)})
+    suppressed = attribute(batch.suppressed, default_source=UNATTRIBUTED_SOURCE)
     attributes: dict[str, Any] = {
         "found": len(findings),
         "ingested": len(ingested),
         "sources": sources,
+        "suppressed": len(suppressed),
+        "find_stage": dict(batch.report),
     }
-    attributes.update(_find_stage_report(pack))
     return {
         "findings": findings,
+        "suppressed_findings": suppressed,
         "spans": [make_span("match", started, attributes)],
     }
-
-
-def _find_stage_report(pack: object) -> dict[str, Any]:
-    """The find-stage coverage denominator and per-source counts, when the pack exposes a
-    finder report. Duck-typed so the core (D3) never depends on a pack's finder — a pack
-    without one simply contributes nothing here (ticket 23's `examined N of M` handoff to
-    the LLM finder, ticket 25)."""
-    reporter = getattr(pack, "last_find_report", None)
-    if not callable(reporter):
-        return {}
-    report = reporter()
-    if report is None:
-        return {}
-    return {"find_stage": report.to_attributes()}

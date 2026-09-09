@@ -16,7 +16,7 @@ pack (roadmap) can be added without reshaping the core.
 
 from __future__ import annotations
 
-from ave.adapters.base import LanguagePack, PreparedFix
+from ave.adapters.base import FindingBatch, LanguagePack, PreparedFix
 
 
 def get_default_pack() -> LanguagePack:
@@ -29,4 +29,4 @@ def get_default_pack() -> LanguagePack:
     return PythonAuthzPack()
 
 
-__all__ = ["LanguagePack", "PreparedFix", "get_default_pack"]
+__all__ = ["FindingBatch", "LanguagePack", "PreparedFix", "get_default_pack"]
