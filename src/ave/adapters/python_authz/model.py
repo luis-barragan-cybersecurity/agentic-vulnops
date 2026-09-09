@@ -45,17 +45,29 @@ RECORD_ENV = "AVE_LLM_RECORD"
 
 @dataclass(frozen=True)
 class ToolCall:
-    """One tool invocation the model asked for: the tool's name and its arguments."""
+    """One tool invocation the model asked for: the tool's name and its arguments.
+
+    `tool_use_id` is Anthropic's live tool-use id. Fixture JSON omits it; the live loop
+    must echo the real id on the tool result or the API rejects the turn.
+    """
 
     name: str
     arguments: dict[str, Any]
+    tool_use_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "arguments": dict(self.arguments)}
+        payload: dict[str, Any] = {"name": self.name, "arguments": dict(self.arguments)}
+        if self.tool_use_id:
+            payload["tool_use_id"] = self.tool_use_id
+        return payload
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> ToolCall:
-        return ToolCall(name=str(data["name"]), arguments=dict(data.get("arguments", {})))
+        return ToolCall(
+            name=str(data["name"]),
+            arguments=dict(data.get("arguments", {})),
+            tool_use_id=str(data.get("tool_use_id", "")),
+        )
 
 
 @dataclass(frozen=True)
@@ -212,7 +224,11 @@ class _AnthropicSession:
         )
         self._messages.append({"role": "assistant", "content": response.content})
         calls = [
-            ToolCall(name=block.name, arguments=dict(block.input))
+            ToolCall(
+                name=block.name,
+                arguments=dict(block.input),
+                tool_use_id=str(getattr(block, "id", "") or ""),
+            )
             for block in response.content
             if getattr(block, "type", None) == "tool_use"
         ]
@@ -235,7 +251,13 @@ class _AnthropicSession:
 
 
 def _tool_use_id(call: ToolCall) -> str:
-    """The id the live loop keys a tool result to; the fixture path never needs it."""
+    """The id the live loop keys a tool result to.
+
+    Live calls carry Anthropic's real tool-use id on `ToolCall`. Fixture JSON and any
+    older recording that stuffed the id into arguments still resolve.
+    """
+    if call.tool_use_id:
+        return call.tool_use_id
     return str(call.arguments.get("_tool_use_id", "toolu_recorded"))
 
 

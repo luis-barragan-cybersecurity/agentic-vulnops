@@ -159,6 +159,20 @@ def test_verdict_citing_an_unknown_handler_is_rejected() -> None:
         finder._accept(record, _verdict(handler_id="app/does/not/exist.py:ghost"))
 
 
+def test_verdict_for_a_different_resolvable_handler_is_rejected() -> None:
+    """Accepted identity is the judged record. A different handler that the store can
+    resolve is still a rejection — resolution is not identity."""
+    other_id = (
+        "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status"
+    )
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    assert store.get_handler(other_id).handler_id != record.handler_id
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(record, _verdict(handler_id=other_id))
+
+
 def test_verdict_with_no_citations_is_rejected() -> None:
     store = CodeFactsStore.build()
     finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))

@@ -33,6 +33,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ave.adapters.python_authz.citations import (
+    Citation,
+    CitationRejected,
+    require_identity,
+    validate_citations,
+)
 from ave.adapters.python_authz.code_facts import Coverage, HandlerNotFound
 from ave.adapters.python_authz.inventory import InventoryRecord
 from ave.adapters.python_authz.model import (
@@ -43,6 +49,10 @@ from ave.adapters.python_authz.model import (
 )
 from ave.prompts import load_prompt, prompt_version
 from ave.state import Finding
+
+#: Public name the finder tests and callers already import. The shared validator raises
+#: `CitationRejected`; this alias keeps the finder's rejection type stable.
+VerdictRejected = CitationRejected
 
 #: The finder's `source` stamp — what per-source recall counts it under (ticket 24). Never
 #: the pack anchor's name and never the answer key's: a run finding carrying this was found
@@ -68,39 +78,6 @@ _TARGET_PREFIX = "target/dvrestaurant/"
 #: The system + per-candidate prompts, versioned through `prompts/manifest.json`.
 _SYSTEM_PROMPT_ID = "python_authz.llm_finder.system"
 _CANDIDATE_PROMPT_ID = "python_authz.llm_finder.candidate"
-
-
-class VerdictRejected(Exception):
-    """A submitted verdict failed validation at the submission boundary. Carries the reason,
-    recorded on the report; the candidate yields no finding rather than a down-weighted one."""
-
-
-@dataclass(frozen=True)
-class Citation:
-    """One evidence reference a verdict must stand behind: a source span and the text it
-    claims is there. Validated against the store before the verdict is accepted."""
-
-    file: str
-    start_line: int
-    end_line: int
-    contains: str
-
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> Citation:
-        return Citation(
-            file=str(data["file"]),
-            start_line=int(data["start_line"]),
-            end_line=int(data["end_line"]),
-            contains=str(data.get("contains", "")),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "file": self.file,
-            "start_line": self.start_line,
-            "end_line": self.end_line,
-            "contains": self.contains,
-        }
 
 
 @dataclass(frozen=True)
@@ -407,38 +384,8 @@ class LLMFinder:
             raise VerdictRejected(
                 f"kind {verdict.kind!r} is not one of {sorted(_ALLOWED_KINDS)}"
             )
-        try:
-            self.store.get_handler(verdict.handler_id)
-        except HandlerNotFound as exc:
-            raise VerdictRejected(
-                f"cited handler {verdict.handler_id!r} does not resolve"
-            ) from exc
-        if not verdict.citations:
-            raise VerdictRejected("a finding must cite at least one source span")
-        for citation in verdict.citations:
-            self._validate_citation(citation)
-
-    def _validate_citation(self, citation: Citation) -> None:
-        if citation.end_line < citation.start_line:
-            raise VerdictRejected(
-                f"citation span {citation.start_line}-{citation.end_line} is inverted"
-            )
-        try:
-            source = self.store.get_source(
-                citation.file, (citation.start_line, citation.end_line)
-            )
-        except (PermissionError, FileNotFoundError, OSError) as exc:
-            raise VerdictRejected(
-                f"cited file {citation.file!r} is not readable: {exc}"
-            ) from exc
-        needle = _normalize(citation.contains)
-        if not needle:
-            raise VerdictRejected("a citation must claim text (contains) to check")
-        if needle not in _normalize(source):
-            raise VerdictRejected(
-                f"cited text {citation.contains!r} not found in "
-                f"{citation.file}:{citation.start_line}-{citation.end_line}"
-            )
+        require_identity(verdict.handler_id, record.handler_id, label="cited handler")
+        validate_citations(self.store, verdict.citations)
 
 
 class _BudgetExhausted(Exception):
@@ -470,9 +417,3 @@ def _finding_id(record: InventoryRecord) -> str:
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
-
-
-def _normalize(text: str) -> str:
-    """Collapse whitespace so a citation's `contains` need not reproduce indentation exactly
-    — the claim is about *what* the line says, not its column."""
-    return " ".join(text.split())
