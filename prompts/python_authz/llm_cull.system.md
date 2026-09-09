@@ -19,10 +19,11 @@ calls only where they change the argument; you have a budget.
 End by calling submit_review exactly once.
 
 - stance `keep` means the finding stands: the benign explanations you considered do not
-  hold. Include at least one `ruled_out` hypothesis that cites the code that disproves
-  that benign story.
-- stance `suppress` means this is not a vulnerability. Include `supports_suppress`
-  hypotheses that cite the guard or binding that holds on every path.
+  hold. A keep review contains only `ruled_out` hypotheses, at least one, each citing
+  the code that disproves that benign story.
+- stance `suppress` means this is not a vulnerability. A suppress review contains only
+  `supports_suppress` hypotheses, at least one, each citing the guard or binding that
+  holds on every path.
 
 Both stances must name this finding's location and kind, and must cite source spans that
 contain the claimed text. A review whose citations do not resolve is rejected outright,

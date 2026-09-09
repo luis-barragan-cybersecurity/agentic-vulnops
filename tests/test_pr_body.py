@@ -268,6 +268,14 @@ def test_unmeasured_counts_sit_in_a_small_table_against_policy_limits() -> None:
     assert "| Routes affected | unmeasured | 15 |" in radius
 
 
+def _with_cleared(final: AVEState, rows: list[dict[str, str]]) -> AVEState:
+    change = dict(final.get("prepared_change") or {})
+    blast = dict(change.get("blast_radius") or {})
+    blast["cleared"] = rows
+    change["blast_radius"] = blast
+    return {**final, "prepared_change": change}
+
+
 def test_cleared_comes_from_validated_ruled_out_on_the_selected_finding() -> None:
     final = run_once(_INITIAL, auto_approve=True)
     body = render_pr_body(final)
@@ -275,54 +283,64 @@ def test_cleared_comes_from_validated_ruled_out_on_the_selected_finding() -> Non
     selected = final["selected_finding"]
     hyps = selected["evidence"]["counter_review"]["hypotheses"]
     ruled_out = next(h["claim"] for h in hyps if h["kind"] == "ruled_out")
+    blast_rows = (final.get("prepared_change") or {}).get("blast_radius", {}).get("cleared")
+    assert blast_rows
+    assert blast_rows[0]["ruled_out"] == ruled_out
     assert "| Ruled out | How |" in cleared
     assert ruled_out in cleared
+    assert "no user_id comparison" in cleared
+    assert "get_order_service.py:11-20" in cleared
+    assert "return db_order" in cleared
     assert "get_order_status" not in cleared
     assert "patch_profile" not in cleared
     for finding in final.get("suppressed_findings") or []:
         assert str(finding.get("id")) not in cleared
+    mutated = dict(selected)
+    evidence = dict(mutated.get("evidence") or {})
+    evidence["counter_review"] = {
+        "basis": "validated",
+        "hypotheses": [{"kind": "ruled_out", "claim": "must not leak", "citations": []}],
+    }
+    mutated["evidence"] = evidence
+    leaked = render_pr_body({**final, "selected_finding": mutated})
+    leak_block = leaked[leaked.find("### Cleared") : leaked.find("### Before you merge")]
+    assert "must not leak" not in leak_block
 
 
 def test_cleared_citation_renders_inclusive_range() -> None:
     final = run_once(_INITIAL, auto_approve=True)
-    selected = dict(final["selected_finding"])
-    evidence = dict(selected.get("evidence") or {})
-    evidence["counter_review"] = {
-        "basis": "validated",
-        "hypotheses": [
-            {
-                "kind": "ruled_out",
-                "claim": "span claim",
-                "citations": [
-                    {
-                        "file": "app/x.py",
-                        "start_line": 10,
-                        "end_line": 20,
-                        "contains": "return db_order",
-                    }
-                ],
-            }
-        ],
-    }
-    selected["evidence"] = evidence
-    body = render_pr_body({**final, "selected_finding": selected})
+    body = render_pr_body(
+        _with_cleared(
+            final,
+            [
+                {
+                    "ruled_out": "span claim",
+                    "how": "the benign story fails (app/x.py:10-20 — return db_order)",
+                }
+            ],
+        )
+    )
     cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
-    assert "`app/x.py:10-20` — return db_order" in cleared
+    assert "the benign story fails (app/x.py:10-20 — return db_order)" in cleared
 
-    evidence["counter_review"]["hypotheses"][0]["citations"][0]["end_line"] = 10
-    selected["evidence"] = evidence
-    body = render_pr_body({**final, "selected_finding": selected})
+    body = render_pr_body(
+        _with_cleared(
+            final,
+            [
+                {
+                    "ruled_out": "span claim",
+                    "how": "the benign story fails (app/x.py:10 — return db_order)",
+                }
+            ],
+        )
+    )
     cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
-    assert "`app/x.py:10` — return db_order" in cleared
+    assert "the benign story fails (app/x.py:10 — return db_order)" in cleared
 
 
 def test_cleared_stays_honest_empty_without_validated_ruled_out() -> None:
     final = run_once(_INITIAL, auto_approve=True)
-    selected = dict(final["selected_finding"])
-    evidence = dict(selected.get("evidence") or {})
-    evidence["counter_review"] = {"basis": "fail_open_missing", "hypotheses": []}
-    selected["evidence"] = evidence
-    body = render_pr_body({**final, "selected_finding": selected})
+    body = render_pr_body(_with_cleared(final, []))
     cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
     assert "Nothing was checked-and-ruled-out by this run, so nothing is listed." in cleared
     assert "| Ruled out | How |" not in cleared
@@ -330,30 +348,52 @@ def test_cleared_stays_honest_empty_without_validated_ruled_out() -> None:
 
 def test_cleared_table_escapes_model_authored_cells() -> None:
     final = run_once(_INITIAL, auto_approve=True)
-    selected = dict(final["selected_finding"])
-    evidence = dict(selected.get("evidence") or {})
-    evidence["counter_review"] = {
-        "basis": "validated",
-        "hypotheses": [
-            {
-                "kind": "ruled_out",
-                "claim": "guarded | <script>alert(1)</script>\nnext",
-                "citations": [
-                    {
-                        "file": "app/x.py",
-                        "start_line": 1,
-                        "contains": "a | b",
-                    }
-                ],
-            }
-        ],
-    }
-    selected["evidence"] = evidence
-    body = render_pr_body({**final, "selected_finding": selected})
+    body = render_pr_body(
+        _with_cleared(
+            final,
+            [
+                {
+                    "ruled_out": "guarded | <script>alert(1)</script>\nnext",
+                    "how": "a | b",
+                }
+            ],
+        )
+    )
     cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
-    assert "guarded \\| &lt;script&gt;alert(1)&lt;/script&gt; next" in cleared
+    assert (
+        "guarded &#124; &lt;script&gt;alert(1)&lt;/script&gt; next"
+        in cleared
+    )
     assert "<script>" not in cleared
     assert "\nnext" not in cleared.split("### Cleared", 1)[1]
+
+
+def test_cleared_cells_neutralize_gfm_markup() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    body = render_pr_body(
+        _with_cleared(
+            final,
+            [
+                {
+                    "ruled_out": r"pre-escaped &#124; and \| pipe",
+                    "how": (
+                        "[link](http://x) ![img](http://y) `code` <b>html</b> "
+                        "A&\nB"
+                    ),
+                }
+            ],
+        )
+    )
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    assert "pre-escaped &amp;#124; and &#92;&#124; pipe" in cleared
+    assert "&#91;link&#93;(http://x)" in cleared
+    assert "&#33;&#91;img&#93;(http://y)" in cleared
+    assert "&#96;code&#96;" in cleared
+    assert "&lt;b&gt;html&lt;/b&gt;" in cleared
+    assert "A&amp; B" in cleared
+    assert "[link](http://x)" not in cleared
+    assert "![img](http://y)" not in cleared
+    assert "`code`" not in cleared
 
 
 def test_policy_limits_fail_closed_when_versions_differ() -> None:

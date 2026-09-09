@@ -405,44 +405,39 @@ def _still_open(
 
 
 def _escape_md_cell(value: object) -> str:
-    """Escape model-authored table cells so pipes, newlines, and raw HTML cannot break
-    the PR body. Citation validation does not make Markdown safe."""
+    """Neutralize model-authored table cells as GFM-safe plain text."""
     text = str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
-    return text.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\\", "&#92;")
+        .replace("|", "&#124;")
+        .replace("`", "&#96;")
+        .replace("[", "&#91;")
+        .replace("]", "&#93;")
+        .replace("!", "&#33;")
+    )
 
 
-def _ruled_out_rows(finding: dict[str, Any]) -> list[tuple[str, str]]:
-    evidence = finding.get("evidence")
-    review = evidence.get("counter_review") if isinstance(evidence, dict) else None
-    if not isinstance(review, dict) or review.get("basis") != "validated":
+def _cleared_rows(blast: dict[str, Any]) -> list[tuple[str, str]]:
+    raw = blast.get("cleared")
+    if not isinstance(raw, list):
         return []
     rows: list[tuple[str, str]] = []
-    for hypothesis in review.get("hypotheses") or []:
-        if not isinstance(hypothesis, dict) or hypothesis.get("kind") != "ruled_out":
+    for item in raw:
+        if not isinstance(item, dict):
             continue
-        claim = str(hypothesis.get("claim", "")).strip()
-        if not claim:
-            continue
-        rows.append((claim, _hypothesis_how(hypothesis)))
+        ruled_out = str(item.get("ruled_out", "")).strip()
+        how = str(item.get("how", "")).strip()
+        if ruled_out:
+            rows.append((ruled_out, how))
     return rows
 
 
-def _hypothesis_how(hypothesis: dict[str, Any]) -> str:
-    citations = hypothesis.get("citations") or []
-    if not isinstance(citations, list) or not citations:
-        return "cited at the cull boundary"
-    first = citations[0] if isinstance(citations[0], dict) else {}
-    file = first.get("file", "?")
-    start = first.get("start_line", "?")
-    end = first.get("end_line", start)
-    span = f"{file}:{start}" if start == end else f"{file}:{start}-{end}"
-    contains = first.get("contains", "")
-    return f"`{span}` — {contains}"
-
-
-def _cleared(finding: dict[str, Any]) -> list[str]:
+def _cleared(blast: dict[str, Any]) -> list[str]:
     lines = ["### Cleared", ""]
-    rows = _ruled_out_rows(finding)
+    rows = _cleared_rows(blast)
     if rows:
         lines.append("| Ruled out | How |")
         lines.append("|---|---|")
@@ -492,7 +487,7 @@ def _blast_radius_blocks(
     lines.append("")
     lines.extend(_one_fact(blast))
     lines.extend(_still_open(findings, finding))
-    lines.extend(_cleared(finding))
+    lines.extend(_cleared(blast))
     lines.extend(_before_you_merge(blast))
     return lines
 

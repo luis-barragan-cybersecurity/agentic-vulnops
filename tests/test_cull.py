@@ -4,25 +4,37 @@ import json
 from collections.abc import Sequence
 from typing import Any, cast
 
+import pytest
+
 from ave.adapters import get_default_pack
+from ave.adapters.python_authz import catalog
 from ave.adapters.python_authz.citations import Citation
 from ave.adapters.python_authz.code_facts import CodeFactsStore
 from ave.adapters.python_authz.cull import (
+    CULL_TOOL_SCHEMAS,
     FAIL_OPEN_BASES,
+    SUBMIT_REVIEW,
     Stance,
     SubmittedStance,
-    _execute,
     attach_review,
+    cull_attributes,
     fail_open,
-    partition_batch,
+    pair_reviews,
     redacted_case,
     resolve_submitted,
     review_accepted,
     review_one,
 )
-from ave.adapters.python_authz.llm_finder import AcceptedCandidate, LLMFinder
+from ave.adapters.python_authz.inventory import InventoryRecord
+from ave.adapters.python_authz.llm_finder import (
+    ROLE_GAP,
+    AcceptedCandidate,
+    LLMFinder,
+)
 from ave.adapters.python_authz.model import FixtureModelClient, ToolCall, ToolResult
 from ave.adapters.python_authz.pack import FIXTURES_DIR, _bind_anchor
+from ave.adapters.python_authz.tools import CULL_RETRIEVAL, execute_retrieval
+from ave.prompts import load_prompt
 from ave.state import Finding
 
 _CITATION = Citation(
@@ -31,6 +43,30 @@ _CITATION = Citation(
     end_line=17,
     contains="Order.id == order_id",
 )
+
+
+def _record() -> InventoryRecord:
+    return InventoryRecord(
+        handler_id="app/x.py:handler",
+        method="GET",
+        path="/x",
+        file="target/dvrestaurant/app/x.py",
+        symbol="handler",
+        line_start=1,
+        line_end=2,
+        inputs=(),
+        dependencies=(),
+        auth_dependencies=(),
+        mutates_state=False,
+        models_queried=(),
+        query_filters=(),
+        identity_guards=(),
+        caller_identity_reaches_query=False,
+    )
+
+
+def _accepted(finding: Finding) -> AcceptedCandidate:
+    return AcceptedCandidate(record=_record(), finding=finding)
 
 
 def _finding(**over: Any) -> Finding:
@@ -81,9 +117,10 @@ def test_validated_suppress_without_oracle_is_effective_suppress() -> None:
     assert review.submitted.stance == "suppress"
     assert review.effective == "suppress"
     assert review.basis == "validated"
-    kept, suppressed = partition_batch([finding], [review])
+    kept, suppressed = pair_reviews([_accepted(finding)], [review])
     assert kept == ()
-    assert suppressed == (finding,)
+    assert [item["id"] for item in suppressed] == [finding["id"]]
+    assert suppressed[0]["evidence"]["counter_review"]["effective"] == "suppress"
 
 
 def test_bound_oracle_records_suppress_but_keeps_and_preserves_drivability() -> None:
@@ -103,16 +140,10 @@ def test_bound_oracle_records_suppress_but_keeps_and_preserves_drivability() -> 
     assert review.basis == "bound_oracle"
     assert finding["confidence"] == confidence
     assert finding["evidence"] == before
-    kept, suppressed = partition_batch([finding], [review])
-    assert kept == (finding,)
+    kept, suppressed = pair_reviews([_accepted(finding)], [review])
     assert suppressed == ()
-
-
-def test_partition_without_a_review_keeps_the_finding() -> None:
-    finding = _finding()
-    kept, suppressed = partition_batch([finding], [])
-    assert kept == (finding,)
-    assert suppressed == ()
+    assert [item["id"] for item in kept] == [finding["id"]]
+    assert kept[0]["evidence"]["counter_review"]["basis"] == "bound_oracle"
 
 
 def test_default_fixture_replay_keeps_eight_with_no_suppress_or_fail_open() -> None:
@@ -168,10 +199,13 @@ def test_redacted_case_omits_oracle_confidence_and_catalog() -> None:
 
 
 def test_cull_tools_reject_list_candidates() -> None:
-    result = _execute(CodeFactsStore.build(), ToolCall("list_candidates", {}))
+    result = execute_retrieval(
+        CodeFactsStore.build(),
+        ToolCall("list_candidates", {}),
+        allowed=CULL_RETRIEVAL,
+    )
     payload = json.loads(result.content)
-    assert "error" in payload
-    assert "list_candidates" in payload["error"]
+    assert payload == {"error": "unknown tool 'list_candidates'"}
 
 
 class _ScriptedSession:
@@ -378,9 +412,12 @@ def test_review_one_suppress_without_oracle_is_suppressed() -> None:
     assert payload["basis"] == "validated"
     assert payload["prompt_versions"] == {"python_authz.llm_cull.system": 1}
     assert payload["client_mode"] == "fixture"
-    kept, suppressed = partition_batch([attached], [review])
+    kept, suppressed = pair_reviews(
+        [AcceptedCandidate(record=candidate.record, finding=candidate.finding)],
+        [review],
+    )
     assert kept == ()
-    assert suppressed == (attached,)
+    assert suppressed[0]["evidence"]["counter_review"]["effective"] == "suppress"
 
 
 def test_review_one_suppress_against_bound_anchor_keeps_with_bound_oracle() -> None:
@@ -517,3 +554,264 @@ def test_cull_setup_failure_fail_opens_each_accepted(monkeypatch: Any) -> None:
     assert {review.basis for review in reviews} == {"fail_open_unavailable"}
     assert all(review.effective == "keep" for review in reviews)
     assert all(review.submitted is None for review in reviews)
+
+
+def test_two_submit_reviews_in_one_batch_is_fail_open_invalid() -> None:
+    candidate = _non_anchor_candidate()
+    keep = _cited_review(candidate, stance="keep", hyp_kind="ruled_out")
+    suppress = _cited_review(candidate, stance="suppress", hyp_kind="supports_suppress")
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _ScriptedClient(
+            _ScriptedSession(
+                [
+                    [
+                        ToolCall("submit_review", keep),
+                        ToolCall("submit_review", suppress),
+                    ]
+                ]
+            )
+        ),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+    assert "exactly one submit_review" in review.reason
+
+
+def test_pair_reviews_keeps_duplicate_location_kind_as_separate_rows() -> None:
+    first = _finding(id="first")
+    second = _finding(id="second")
+    keep = resolve_submitted(first, _stance("keep"), **_meta())
+    suppress = resolve_submitted(second, _stance("suppress"), **_meta())
+    kept, suppressed = pair_reviews([_accepted(first), _accepted(second)], [keep, suppress])
+    assert [item["id"] for item in kept] == ["first"]
+    assert [item["id"] for item in suppressed] == ["second"]
+    assert kept[0]["evidence"]["counter_review"]["effective"] == "keep"
+    assert suppressed[0]["evidence"]["counter_review"]["effective"] == "suppress"
+
+
+def test_role_gap_at_anchor_is_not_bound_protected_or_drivable() -> None:
+    loc = catalog.anchor_location()
+    finding = _finding(kind=ROLE_GAP, location=loc)
+    bound = _bind_anchor(finding)
+    assert bound["evidence"] == finding["evidence"]
+    assert "oracle" not in bound["evidence"]
+    assert not bound["evidence"].get("is_loop_anchor")
+    review = resolve_submitted(
+        bound,
+        _stance("suppress"),
+        location_key=loc,
+        prompt_versions={},
+        client_mode="fixture",
+    )
+    assert review.basis == "validated"
+    assert review.effective == "suppress"
+    smuggled = _finding(
+        kind=ROLE_GAP,
+        location=loc,
+        evidence={
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+            "is_loop_anchor": True,
+        },
+    )
+    assert get_default_pack().can_drive(_bind_anchor(smuggled)) is False
+    assert get_default_pack().can_drive(smuggled) is False
+
+
+def test_review_one_sends_exact_redacted_user_and_cull_tools() -> None:
+    store = CodeFactsStore.build()
+    report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
+    candidate = _anchor_candidate()
+    captured: dict[str, Any] = {}
+
+    class _Capture:
+        name = "fixture"
+
+        def begin(self, **kwargs: Any) -> Any:
+            captured.update(kwargs)
+            raise FileNotFoundError("stop after capture")
+
+    review = review_one(
+        store,
+        candidate,
+        _Capture(),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.basis == "fail_open_unavailable"
+    case = redacted_case(candidate)
+    expected_user = load_prompt("python_authz.llm_cull.candidate").format(
+        case=json.dumps(case, indent=2)
+    )
+    assert captured["user"] == expected_user
+    assert captured["tools"] == CULL_TOOL_SCHEMAS
+    assert captured["terminal_tool"] == SUBMIT_REVIEW
+    assert "list_candidates" not in [tool["name"] for tool in captured["tools"]]
+    blob = captured["user"]
+    assert "oracle" not in blob
+    assert "confidence" not in blob
+    assert "catalog" not in blob
+    assert "list_candidates" not in blob
+    for other in report.accepted:
+        if other.record.handler_id != candidate.record.handler_id:
+            assert other.record.handler_id not in blob
+
+
+def test_redaction_leak_aborts_before_begin(monkeypatch: Any) -> None:
+    began: list[object] = []
+
+    class _Capture:
+        name = "fixture"
+
+        def begin(self, **kwargs: Any) -> Any:
+            began.append(kwargs)
+            raise AssertionError("begin must not run")
+
+    monkeypatch.setattr(
+        "ave.adapters.python_authz.cull.redacted_case",
+        lambda candidate: {"location": "x", "oracle": {"path": "leaked"}},
+    )
+    with pytest.raises(ValueError, match="leaked"):
+        review_one(
+            CodeFactsStore.build(),
+            _anchor_candidate(),
+            _Capture(),
+            budget=8,
+            prompt_versions={},
+        )
+    assert began == []
+
+
+def test_null_hypothesis_is_fail_open_invalid_not_session_error() -> None:
+    candidate = _non_anchor_candidate()
+    payload = _cited_review(candidate, stance="keep", hyp_kind="ruled_out")
+    payload["hypotheses"] = [None]
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(payload),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+
+
+def test_null_citation_item_is_fail_open_invalid_not_session_error() -> None:
+    candidate = _non_anchor_candidate()
+    payload = _cited_review(candidate, stance="keep", hyp_kind="ruled_out")
+    payload["cited_spans"] = [None]
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(payload),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+
+
+def test_null_start_line_is_a_recoverable_tool_error() -> None:
+    candidate = _non_anchor_candidate()
+    seen: list[list[ToolResult]] = []
+
+    class _RecoverSession:
+        def __init__(self) -> None:
+            self._turn = 0
+
+        def respond(self, results: Sequence[ToolResult]) -> list[ToolCall]:
+            if self._turn == 0:
+                self._turn = 1
+                return [
+                    ToolCall(
+                        "get_source",
+                        {
+                            "file": candidate.record.file,
+                            "start_line": None,
+                            "end_line": 3,
+                        },
+                    )
+                ]
+            seen.append(list(results))
+            return [
+                ToolCall(
+                    "submit_review",
+                    _cited_review(candidate, stance="keep", hyp_kind="ruled_out"),
+                )
+            ]
+
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _ScriptedClient(_RecoverSession()),
+        budget=8,
+        prompt_versions={},
+    )
+    assert seen
+    payload = json.loads(seen[0][0].content)
+    assert "error" in payload
+    assert review.basis == "validated"
+    assert review.submitted is not None
+    assert review.effective == "keep"
+
+
+def _bad_cite(**over: Any) -> dict[str, Any]:
+    cite: dict[str, Any] = {
+        "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+        "start_line": 17,
+        "end_line": 17,
+        "contains": "Order.id == order_id",
+    }
+    cite.update(over)
+    return cite
+
+
+def test_negative_beyond_eof_and_wrong_typed_citations_cannot_suppress() -> None:
+    candidate = _non_anchor_candidate()
+    store = CodeFactsStore.build()
+    file = candidate.record.file
+    line_count = len(store.get_source(file).splitlines())
+    cases = [
+        _bad_cite(file=file, start_line=-1, end_line=1, contains="x"),
+        _bad_cite(file=file, start_line=1, end_line=line_count + 1, contains="x"),
+        _bad_cite(file=file, start_line=True, end_line=1, contains="x"),
+        _bad_cite(file=file, start_line=1.0, end_line=1, contains="x"),
+        _bad_cite(file=file, start_line="1", end_line=1, contains="x"),
+    ]
+    for cite in cases:
+        payload = _cited_review(candidate, stance="suppress", hyp_kind="supports_suppress")
+        payload["cited_spans"] = [cite]
+        payload["hypotheses"][0]["cited_spans"] = [cite]
+        review = review_one(
+            store,
+            candidate,
+            _submit_client(payload),
+            budget=8,
+            prompt_versions={},
+        )
+        assert review.submitted is None, cite
+        assert review.basis == "fail_open_invalid", cite
+
+
+def test_cull_attributes_empty_reviews_does_not_reread_prompt_metadata(
+    monkeypatch: Any,
+) -> None:
+    def _boom() -> dict[str, int]:
+        raise AssertionError("prompt_versions must not be read for an empty set")
+
+    monkeypatch.setattr("ave.adapters.python_authz.cull.prompt_versions", _boom)
+    attrs = cull_attributes((), client_mode="fixture")
+    assert attrs["reviewed"] == 0
+    assert attrs["kept"] == 0
+    assert attrs["suppressed"] == 0
+    assert attrs["fail_open"] == 0
+    assert attrs["prompt_versions"] == {}
+    assert attrs["reviews"] == []
+    assert attrs["client"] == "fixture"

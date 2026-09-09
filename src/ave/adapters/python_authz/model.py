@@ -14,8 +14,9 @@ SUBMIT_VERDICT = "submit_verdict"
 #: Environment switch: set truthy to reach the live model instead of the recorded fixtures.
 #: Absent or falsey (the default, and CI) means fixtures only — no network.
 LIVE_ENV = "AVE_LLM_LIVE"
-#: Optional directory the live client records fresh transcripts into, so a live run can
-#: refresh the fixtures the offline path replays.
+#: Optional parent directory the live client records fresh transcripts into. Live turns
+#: land at ``<AVE_LLM_RECORD>/<stage>/<candidate-slug>.json`` (``llm_finder`` or
+#: ``llm_cull``).
 RECORD_ENV = "AVE_LLM_RECORD"
 
 

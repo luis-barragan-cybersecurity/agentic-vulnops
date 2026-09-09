@@ -1,12 +1,12 @@
 {
-  "run_id": "929fc438ab034daab1f6b5facf805517",
+  "run_id": "e2c2507df36b40adb471e5810eb7076c",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-09T02:16:21.081146+00:00",
-      "ended_at": "2026-09-09T02:16:21.093718+00:00",
+      "started_at": "2026-09-09T02:56:17.029539+00:00",
+      "ended_at": "2026-09-09T02:56:17.040184+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,8 +14,8 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-09T02:16:21.094781+00:00",
-      "ended_at": "2026-09-09T02:16:21.245897+00:00",
+      "started_at": "2026-09-09T02:56:17.041132+00:00",
+      "ended_at": "2026-09-09T02:56:17.152019+00:00",
       "attributes": {
         "found": 8,
         "ingested": 8,
@@ -55,8 +55,8 @@
             "bound_oracle_overrides": 0,
             "client": "fixture",
             "prompt_versions": {
-              "python_authz.llm_cull.system": 1,
-              "python_authz.llm_cull.candidate": 1
+              "python_authz.llm_cull.system": 2,
+              "python_authz.llm_cull.candidate": 2
             },
             "reviews": [
               {
@@ -65,7 +65,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The update loads the user by the caller-supplied username, not current_user",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
@@ -90,7 +90,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The update loads the user by the caller-supplied username, not current_user",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
@@ -115,8 +115,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -126,7 +126,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
@@ -151,7 +151,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
@@ -176,8 +176,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -187,7 +187,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
@@ -212,7 +212,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
@@ -237,8 +237,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -248,7 +248,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The handler returns db_order after a fetch by order_id with no user_id comparison",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
@@ -273,7 +273,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The handler returns db_order after a fetch by order_id with no user_id comparison",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
@@ -298,8 +298,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -309,7 +309,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The delivery listing has no auth dependency and queries every Order",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
@@ -334,7 +334,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The delivery listing has no auth dependency and queries every Order",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
@@ -359,8 +359,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -370,7 +370,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The query uses attacker-supplied user_id when that query parameter is present",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/referrals/service.py",
@@ -395,7 +395,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The query uses attacker-supplied user_id when that query parameter is present",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/referrals/service.py",
@@ -420,8 +420,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -431,7 +431,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The username branch looks up User by the caller-supplied username",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/referrals/service.py",
@@ -456,7 +456,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The username branch looks up User by the caller-supplied username",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/referrals/service.py",
@@ -481,8 +481,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               },
@@ -492,7 +492,7 @@
                 "source": "ave:llm-finder",
                 "submitted": {
                   "stance": "keep",
-                  "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                  "reason": "The only role check forbids CHEF; any authenticated user can assign other privileged roles",
                   "citations": [
                     {
                       "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
@@ -517,7 +517,7 @@
                   ]
                 },
                 "effective": "keep",
-                "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+                "reason": "The only role check forbids CHEF; any authenticated user can assign other privileged roles",
                 "citations": [
                   {
                     "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
@@ -542,8 +542,8 @@
                 ],
                 "basis": "validated",
                 "prompt_versions": {
-                  "python_authz.llm_cull.system": 1,
-                  "python_authz.llm_cull.candidate": 1
+                  "python_authz.llm_cull.system": 2,
+                  "python_authz.llm_cull.candidate": 2
                 },
                 "client_mode": "fixture"
               }
@@ -554,8 +554,8 @@
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-09T02:16:21.246461+00:00",
-      "ended_at": "2026-09-09T02:16:21.246590+00:00",
+      "started_at": "2026-09-09T02:56:17.155870+00:00",
+      "ended_at": "2026-09-09T02:56:17.155936+00:00",
       "attributes": {
         "selected": true,
         "selection": {
@@ -654,8 +654,8 @@
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-09T02:16:21.247737+00:00",
-      "ended_at": "2026-09-09T02:16:21.250671+00:00",
+      "started_at": "2026-09-09T02:56:17.159384+00:00",
+      "ended_at": "2026-09-09T02:56:17.163600+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -664,24 +664,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-09T02:16:21.252754+00:00",
-      "ended_at": "2026-09-09T02:16:21.252879+00:00",
+      "started_at": "2026-09-09T02:56:17.166511+00:00",
+      "ended_at": "2026-09-09T02:56:17.166661+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-09T02:16:21.253394+00:00",
-      "ended_at": "2026-09-09T02:16:21.253399+00:00",
+      "started_at": "2026-09-09T02:56:17.167874+00:00",
+      "ended_at": "2026-09-09T02:56:17.167880+00:00",
       "attributes": {
-        "pr_ref": "local:pr/929fc438ab034daab1f6b5facf805517"
+        "pr_ref": "local:pr/e2c2507df36b40adb471e5810eb7076c"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-09T02:16:21.254244+00:00",
-      "ended_at": "2026-09-09T02:16:21.254266+00:00",
+      "started_at": "2026-09-09T02:56:17.169320+00:00",
+      "ended_at": "2026-09-09T02:56:17.169341+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -691,7 +691,7 @@
   "findings": [
     {
       "finding_id": "ave-llm-update_profile_service-update_profile",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -699,7 +699,7 @@
     },
     {
       "finding_id": "ave-llm-delete_menu_item_service-delete_menu_item",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -707,7 +707,7 @@
     },
     {
       "finding_id": "ave-llm-update_menu_item_service-update_menu_item",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -715,15 +715,15 @@
     },
     {
       "finding_id": "ave-llm-get_order_service-get_order",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
-      "triaged_at": "2026-09-09T02:16:21.247737+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "triaged_at": "2026-09-09T02:56:17.159384+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
     },
     {
       "finding_id": "ave-llm-get_orders_for_delivery_service-get_orders",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -731,7 +731,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_discount_coupons",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -739,7 +739,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_referral_code_endpoint",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -747,7 +747,7 @@
     },
     {
       "finding_id": "ave-llm-update_user_role_service-update_user_role",
-      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",

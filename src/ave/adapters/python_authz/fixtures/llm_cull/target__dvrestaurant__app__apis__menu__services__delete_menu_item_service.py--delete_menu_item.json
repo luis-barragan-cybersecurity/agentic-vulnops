@@ -15,7 +15,7 @@
           "location": "app/apis/menu/services/delete_menu_item_service.py:delete_menu_item",
           "kind": "function-role-gap",
           "stance": "keep",
-          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "reason": "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker",
           "cited_spans": [
             {
               "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",

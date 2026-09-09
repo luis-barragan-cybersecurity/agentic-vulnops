@@ -15,7 +15,7 @@
           "location": "app/apis/referrals/service.py:get_referral_code_endpoint",
           "kind": "object-ownership-gap",
           "stance": "keep",
-          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "reason": "The username branch looks up User by the caller-supplied username",
           "cited_spans": [
             {
               "file": "target/dvrestaurant/app/apis/referrals/service.py",

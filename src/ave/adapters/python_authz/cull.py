@@ -11,9 +11,13 @@ from ave.adapters.python_authz.citations import (
     require_identity,
     validate_citations,
 )
-from ave.adapters.python_authz.code_facts import HandlerNotFound
 from ave.adapters.python_authz.llm_finder import AcceptedCandidate
-from ave.adapters.python_authz.model import ModelClient, ToolCall, ToolResult
+from ave.adapters.python_authz.model import ModelClient, ToolResult
+from ave.adapters.python_authz.tools import (
+    CULL_RETRIEVAL,
+    execute_retrieval,
+    retrieval_schemas,
+)
 from ave.prompts import load_prompt, prompt_version
 from ave.state import Finding
 
@@ -47,9 +51,6 @@ _CANDIDATE_PROMPT_ID = "python_authz.llm_cull.candidate"
 _ALLOWED_STANCES: frozenset[Stance] = frozenset({"keep", "suppress"})
 _ALLOWED_HYPOTHESES: frozenset[HypothesisKind] = frozenset(
     {"ruled_out", "supports_suppress"}
-)
-_RETRIEVAL_TOOLS = frozenset(
-    {"get_handler", "get_source", "model_definition", "callers_of"}
 )
 
 
@@ -195,66 +196,29 @@ def resolve_submitted(
     )
 
 
-def partition_batch(
-    findings: Sequence[Finding], reviews: Sequence[CounterReview]
+def pair_reviews(
+    accepted: Sequence[AcceptedCandidate], reviews: Sequence[CounterReview]
 ) -> tuple[tuple[Finding, ...], tuple[Finding, ...]]:
-    by_key = {(review.location_key, review.kind): review for review in reviews}
     kept: list[Finding] = []
     suppressed: list[Finding] = []
-    for finding in findings:
-        key = (str(finding.get("location", "")), str(finding.get("kind", "")))
-        review = by_key.get(key)
-        if review is not None and review.effective == "suppress":
-            suppressed.append(finding)
+    for candidate, review in zip(accepted, reviews, strict=True):
+        finding = candidate.finding
+        require_identity(
+            review.location_key,
+            str(finding.get("location", "")),
+            label="location",
+        )
+        require_identity(review.kind, str(finding.get("kind", "")), label="kind")
+        attached = attach_review(finding, review)
+        if review.effective == "suppress":
+            suppressed.append(attached)
         else:
-            kept.append(finding)
+            kept.append(attached)
     return tuple(kept), tuple(suppressed)
 
 
 CULL_TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "name": "get_handler",
-        "description": "The full inventory record for a handler id (file:symbol).",
-        "input_schema": {
-            "type": "object",
-            "properties": {"handler_id": {"type": "string"}},
-            "required": ["handler_id"],
-        },
-    },
-    {
-        "name": "get_source",
-        "description": (
-            "Source of an allowlisted file, comments stripped. Optional inclusive 1-based "
-            "line range."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string"},
-                "start_line": {"type": "integer"},
-                "end_line": {"type": "integer"},
-            },
-            "required": ["file"],
-        },
-    },
-    {
-        "name": "model_definition",
-        "description": "A data model's owner-column facts and source.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"name": {"type": "string"}},
-            "required": ["name"],
-        },
-    },
-    {
-        "name": "callers_of",
-        "description": "Every call site of a symbol across the allowlisted tree.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"symbol": {"type": "string"}},
-            "required": ["symbol"],
-        },
-    },
+    *retrieval_schemas(CULL_RETRIEVAL),
     {
         "name": SUBMIT_REVIEW,
         "description": (
@@ -411,13 +375,14 @@ def review_one(
         "prompt_versions": prompt_versions,
         "client_mode": client.name,
     }
+    case = redacted_case(candidate)
+    _reject_forbidden(case)
+    user = load_prompt(_CANDIDATE_PROMPT_ID).format(case=json.dumps(case, indent=2))
     try:
         session = client.begin(
             candidate_id=candidate.record.handler_id,
             system=load_prompt(_SYSTEM_PROMPT_ID),
-            user=load_prompt(_CANDIDATE_PROMPT_ID).format(
-                case=json.dumps(redacted_case(candidate), indent=2)
-            ),
+            user=user,
             tools=CULL_TOOL_SCHEMAS,
             terminal_tool=SUBMIT_REVIEW,
         )
@@ -441,11 +406,19 @@ def review_one(
                     reason="session submitted no review",
                     **meta,
                 )
-            next_results: list[ToolResult] = []
-            for call in calls:
-                if call.name == SUBMIT_REVIEW:
-                    return _accept_review(store, candidate, call.arguments, **meta)
-                next_results.append(_execute(store, call))
+            terminals = [call for call in calls if call.name == SUBMIT_REVIEW]
+            if len(terminals) > 1:
+                return fail_open(
+                    finding,
+                    basis="fail_open_invalid",
+                    reason="exactly one submit_review is accepted per turn",
+                    **meta,
+                )
+            if len(terminals) == 1:
+                return _accept_review(store, candidate, terminals[0].arguments, **meta)
+            next_results = [
+                execute_retrieval(store, call, allowed=CULL_RETRIEVAL) for call in calls
+            ]
             results = next_results
     except Exception as exc:
         return fail_open(
@@ -459,9 +432,7 @@ def review_one(
     )
 
 
-def attach_review(finding: Finding, review: CounterReview | None) -> Finding:
-    if review is None:
-        return finding
+def attach_review(finding: Finding, review: CounterReview) -> Finding:
     attached = dict(finding)
     raw = attached.get("evidence", {})
     evidence = dict(raw) if isinstance(raw, dict) else {}
@@ -473,7 +444,7 @@ def attach_review(finding: Finding, review: CounterReview | None) -> Finding:
 def cull_attributes(
     reviews: Sequence[CounterReview], *, client_mode: str
 ) -> dict[str, Any]:
-    versions = dict(reviews[0].prompt_versions) if reviews else prompt_versions()
+    versions = dict(reviews[0].prompt_versions) if reviews else {}
     return {
         "reviewed": len(reviews),
         "kept": sum(1 for review in reviews if review.effective == "keep"),
@@ -537,7 +508,9 @@ def _parse_submitted(
     reason = str(args.get("reason", "")).strip()
     if not reason:
         raise CitationRejected("reason must be non-empty")
-    citations = tuple(Citation.from_dict(item) for item in args.get("cited_spans", []))
+    citations = tuple(
+        Citation.from_dict(item) for item in args.get("cited_spans") or []
+    )
     validate_citations(store, citations)
     if "hypotheses" not in args:
         raise CitationRejected("at least one hypothesis is required")
@@ -561,14 +534,20 @@ def _parse_submitted(
     )
 
 
-def _parse_hypothesis(store: Any, data: dict[str, Any]) -> Hypothesis:
+def _parse_hypothesis(store: Any, data: Any) -> Hypothesis:
+    if not isinstance(data, dict):
+        raise CitationRejected(
+            f"hypothesis must be an object, got {type(data).__name__}"
+        )
     kind = str(data.get("kind", ""))
     if kind not in _ALLOWED_HYPOTHESES:
         raise CitationRejected(f"hypothesis kind {kind!r} is not allowed")
     claim = str(data.get("claim", "")).strip()
     if not claim:
         raise CitationRejected("hypothesis claim must be non-empty")
-    citations = tuple(Citation.from_dict(item) for item in data.get("cited_spans", []))
+    citations = tuple(
+        Citation.from_dict(item) for item in data.get("cited_spans") or []
+    )
     validate_citations(store, citations)
     typed_kind: HypothesisKind = (
         "ruled_out" if kind == "ruled_out" else "supports_suppress"
@@ -578,38 +557,6 @@ def _parse_hypothesis(store: Any, data: dict[str, Any]) -> Hypothesis:
         claim=claim,
         citations=citations,
     )
-
-
-def _execute(store: Any, call: ToolCall) -> ToolResult:
-    try:
-        content = _dispatch(store, call)
-    except (HandlerNotFound, KeyError, PermissionError, ValueError) as exc:
-        content = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-    return ToolResult(call=call, content=content)
-
-
-def _dispatch(store: Any, call: ToolCall) -> str:
-    if call.name not in _RETRIEVAL_TOOLS:
-        return json.dumps({"error": f"unknown tool {call.name!r}"})
-    args = call.arguments
-    if call.name == "get_handler":
-        return json.dumps(store.get_handler(str(args["handler_id"])).to_dict())
-    if call.name == "get_source":
-        lines = _line_range(args)
-        return json.dumps({"source": store.get_source(str(args["file"]), lines)})
-    if call.name == "model_definition":
-        definition = store.model_definition(str(args["name"]))
-        return json.dumps({"facts": definition.facts.to_dict(), "source": definition.source})
-    sites = store.callers_of(str(args["symbol"]))
-    return json.dumps(
-        [{"file": site.file, "caller": site.caller_symbol, "line": site.line} for site in sites]
-    )
-
-
-def _line_range(args: dict[str, Any]) -> tuple[int, int] | None:
-    if "start_line" in args and "end_line" in args:
-        return (int(args["start_line"]), int(args["end_line"]))
-    return None
 
 
 def _reject_forbidden(value: Any) -> None:

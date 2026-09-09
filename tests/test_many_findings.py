@@ -159,6 +159,16 @@ def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
     merged = merge_findings([loser, winner], location_key=_by_location)
     assert merged[0]["evidence"]["is_loop_anchor"] is True
     assert pack.can_drive(merged[0]) is False
+    role_at_anchor = _finding(
+        "role-anchor",
+        location=catalog.anchor_location(),
+        kind="function-role-gap",
+        evidence={
+            "is_loop_anchor": True,
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+        },
+    )
+    assert pack.can_drive(role_at_anchor) is False
 
 
 def test_merge_preserves_ingest_order_and_folds_transitively() -> None:

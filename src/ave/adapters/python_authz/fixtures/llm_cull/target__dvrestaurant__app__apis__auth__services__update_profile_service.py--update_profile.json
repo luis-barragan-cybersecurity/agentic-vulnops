@@ -15,7 +15,7 @@
           "location": "app/apis/auth/services/update_profile_service.py:update_profile",
           "kind": "object-ownership-gap",
           "stance": "keep",
-          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "reason": "The update loads the user by the caller-supplied username, not current_user",
           "cited_spans": [
             {
               "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",

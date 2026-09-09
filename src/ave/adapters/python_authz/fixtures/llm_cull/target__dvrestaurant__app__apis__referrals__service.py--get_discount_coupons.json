@@ -15,7 +15,7 @@
           "location": "app/apis/referrals/service.py:get_discount_coupons",
           "kind": "object-ownership-gap",
           "stance": "keep",
-          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "reason": "The query uses attacker-supplied user_id when that query parameter is present",
           "cited_spans": [
             {
               "file": "target/dvrestaurant/app/apis/referrals/service.py",

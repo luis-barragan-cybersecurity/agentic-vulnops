@@ -26,6 +26,7 @@ _CULL_DIR = (
 class Plan:
     ruled_out: str
     needle: str
+    why: str
 
 
 _PLANS: dict[str, Plan] = {
@@ -34,34 +35,52 @@ _PLANS: dict[str, Plan] = {
             "A post-fetch ownership guard binds db_order to current_user on every path"
         ),
         needle="return db_order",
+        why=(
+            "The handler returns db_order after a fetch by order_id with no user_id "
+            "comparison"
+        ),
     ),
     "update_profile": Plan(
         ruled_out="The profile update operates only on current_user",
         needle="get_user_by_username(db, user.username)",
+        why="The update loads the user by the caller-supplied username, not current_user",
     ),
     "get_discount_coupons": Plan(
         ruled_out="Coupon listing always binds to current_user.id",
         needle="user_id if user_id is not None else current_user.id",
+        why="The query uses attacker-supplied user_id when that query parameter is present",
     ),
     "get_referral_code_endpoint": Plan(
         ruled_out="Referral code lookup always uses current_user.id",
         needle="UserModel.username == username",
+        why="The username branch looks up User by the caller-supplied username",
     ),
     "delete_menu_item": Plan(
         ruled_out="A RolesBasedAuthChecker role gate protects this mutation",
         needle="Depends(get_current_user)",
+        why=(
+            "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker"
+        ),
     ),
     "update_menu_item": Plan(
         ruled_out="A RolesBasedAuthChecker role gate protects this mutation",
         needle="Depends(get_current_user)",
+        why=(
+            "The signature Depends(get_current_user) only, with no RolesBasedAuthChecker"
+        ),
     ),
     "update_user_role": Plan(
         ruled_out="Only an administrator can change another user's role",
         needle="update_user(db, user.username, user)",
+        why=(
+            "The only role check forbids CHEF; any authenticated user can assign other "
+            "privileged roles"
+        ),
     ),
     "get_orders": Plan(
         ruled_out="Listing orders for delivery requires a staff role",
         needle="db.query(Order)",
+        why="The delivery listing has no auth dependency and queries every Order",
     ),
 }
 
@@ -95,10 +114,7 @@ def _turns(
         "location": finding.get("location"),
         "kind": finding.get("kind"),
         "stance": "keep",
-        "reason": (
-            "The benign authorization pattern does not hold on every path; "
-            "the finder's gap stands."
-        ),
+        "reason": plan.why,
         "cited_spans": stance_cites,
         "hypotheses": [
             {

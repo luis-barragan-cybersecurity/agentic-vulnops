@@ -43,6 +43,8 @@ def _span_end(spans: list[dict[str, Any]], phase: str) -> str | None:
 
 
 def _finding_lifecycles(state: AVEState) -> list[FindingLifecycle]:
+    """Kept findings stay `open` unless the selected head is remediatively triaged.
+    Suppressed findings are `false_positive` with `triaged_at` at Match completion."""
     spans = state.get("spans", [])
     first_observed = _span_start(spans, "intake") or _span_start(spans, "match")
     if first_observed is None:

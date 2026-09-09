@@ -9,13 +9,15 @@ from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
 from ave.adapters.python_authz.code_facts import CodeFactsStore
 from ave.adapters.python_authz.cull import (
-    attach_review,
     cull_attributes,
-    location_key,
-    partition_batch,
+    pair_reviews,
     review_accepted,
 )
-from ave.adapters.python_authz.llm_finder import AcceptedCandidate, LLMFinder
+from ave.adapters.python_authz.llm_finder import (
+    OWNERSHIP_GAP,
+    AcceptedCandidate,
+    LLMFinder,
+)
 from ave.adapters.python_authz.model import default_model_client
 from ave.state import Finding
 
@@ -61,9 +63,16 @@ def get_order(
 """
 
 
+def _is_anchor_identity(finding: Finding) -> bool:
+    return (
+        finding.get("location") == catalog.anchor_location()
+        and finding.get("kind") == OWNERSHIP_GAP
+    )
+
+
 def _bind_anchor(original: Finding) -> Finding:
     finding = cast("Finding", dict(original))
-    if finding.get("location") != catalog.anchor_location():
+    if not _is_anchor_identity(finding):
         return finding
     raw = finding.get("evidence", {})
     evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
@@ -71,6 +80,37 @@ def _bind_anchor(original: Finding) -> Finding:
     evidence["is_loop_anchor"] = True
     finding["evidence"] = evidence
     return finding
+
+
+def _cleared_how(reason: str, hypothesis: dict[str, Any]) -> str:
+    citations = hypothesis.get("citations") or []
+    first = citations[0] if citations and isinstance(citations[0], dict) else {}
+    file = first.get("file", "?")
+    start = first.get("start_line", "?")
+    end = first.get("end_line", start)
+    span = f"{file}:{start}" if start == end else f"{file}:{start}-{end}"
+    contains = first.get("contains", "")
+    cite = f"{span} — {contains}" if contains else span
+    if reason:
+        return f"{reason} ({cite})"
+    return cite
+
+
+def _cleared_rows(finding: Finding) -> list[dict[str, str]]:
+    evidence = finding.get("evidence")
+    review = evidence.get("counter_review") if isinstance(evidence, dict) else None
+    if not isinstance(review, dict) or review.get("basis") != "validated":
+        return []
+    reason = str(review.get("reason", "")).strip()
+    rows: list[dict[str, str]] = []
+    for hypothesis in review.get("hypotheses") or []:
+        if not isinstance(hypothesis, dict) or hypothesis.get("kind") != "ruled_out":
+            continue
+        claim = str(hypothesis.get("claim", "")).strip()
+        if not claim:
+            continue
+        rows.append({"ruled_out": claim, "how": _cleared_how(reason, hypothesis)})
+    return rows
 
 
 def _no_oracle(finding: Finding) -> NotImplementedError:
@@ -94,17 +134,7 @@ class PythonAuthzPack:
             for candidate in report.accepted
         ]
         reviews = review_accepted(store, accepted, cull_client)
-        by_key = {(review.location_key, review.kind): review for review in reviews}
-        findings = [
-            attach_review(
-                candidate.finding,
-                by_key.get(
-                    (location_key(candidate.finding), str(candidate.finding.get("kind", "")))
-                ),
-            )
-            for candidate in accepted
-        ]
-        kept, suppressed = partition_batch(findings, reviews)
+        kept, suppressed = pair_reviews(accepted, reviews)
         attrs = report.to_attributes()
         attrs["cull"] = cull_attributes(reviews, client_mode=cull_client.name)
         return FindingBatch(kept=kept, suppressed=suppressed, report=attrs)
@@ -121,9 +151,9 @@ class PythonAuthzPack:
         return f"{file}:{tail}"
 
     def can_drive(self, finding: Finding) -> bool:
-        """True only for the current hard-coded anchor: recognized oracle evidence at
-        `catalog.anchor_location()`. Oracle keys alone do not make a finding drivable."""
-        if finding.get("location") != catalog.anchor_location():
+        """True only for the current hard-coded anchor identity plus oracle evidence.
+        A function-role-gap at the anchor location is not drivable."""
+        if not _is_anchor_identity(finding):
             return False
         evidence = finding.get("evidence", {})
         if not isinstance(evidence, dict) or not evidence.get("is_loop_anchor"):
@@ -149,7 +179,7 @@ class PythonAuthzPack:
             "files": None,
             "dependents": None,
             "routes": None,
-            "cleared": [],
+            "cleared": _cleared_rows(finding),
             "before_you_merge": [
                 {
                     "command": f"cd target/dvrestaurant && poetry run pytest {oracle_ref}",

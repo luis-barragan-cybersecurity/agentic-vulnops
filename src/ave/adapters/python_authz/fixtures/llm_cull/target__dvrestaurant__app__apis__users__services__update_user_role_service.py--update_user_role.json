@@ -15,7 +15,7 @@
           "location": "app/apis/users/services/update_user_role_service.py:update_user_role",
           "kind": "function-role-gap",
           "stance": "keep",
-          "reason": "The benign authorization pattern does not hold on every path; the finder's gap stands.",
+          "reason": "The only role check forbids CHEF; any authenticated user can assign other privileged roles",
           "cited_spans": [
             {
               "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
