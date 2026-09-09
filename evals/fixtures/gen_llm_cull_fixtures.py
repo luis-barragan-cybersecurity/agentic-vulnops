@@ -1,15 +1,3 @@
-"""Regenerate the adversarial cull's recorded transcripts (ticket 26).
-
-The cull replays a recorded transcript per accepted finding so ``make check`` stays
-offline. This script reads the *real* code-facts store and the finder's accepted
-pairs, then writes one keep review per finding whose citations resolve against that
-store. It does not invent a false positive.
-
-Each keep includes a citation-validated ``ruled_out`` hypothesis: a benign
-authorization story the source disproves. Run:
-``python evals/fixtures/gen_llm_cull_fixtures.py``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -36,9 +24,6 @@ _CULL_DIR = (
 
 @dataclass(frozen=True)
 class Plan:
-    """One honest keep: the benign story that does not hold, and the source needle
-    that disproves it."""
-
     ruled_out: str
     needle: str
 
@@ -95,15 +80,15 @@ def _turns(
     finding: dict[str, Any],
     plan: Plan,
 ) -> list[list[dict[str, Any]]]:
-    line = _find_line(store, record, plan.needle)
+    _find_line(store, record, plan.needle)
     evidence = finding.get("evidence", {})
     stance_cites = list(evidence.get("citations") or [])
     if not stance_cites:
         raise ValueError(f"finder finding {finding.get('id')} has no citations")
     hyp_cite = {
         "file": record.file,
-        "start_line": line,
-        "end_line": line,
+        "start_line": record.line_start,
+        "end_line": record.line_end,
         "contains": plan.needle,
     }
     review = {

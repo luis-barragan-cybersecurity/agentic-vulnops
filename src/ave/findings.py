@@ -97,11 +97,6 @@ def merge_findings(
 
 
 def _union_evidence(winner: Finding, loser: Finding) -> dict[str, Any] | None:
-    """Key-agnostic union. The confidence winner keeps conflicting values.
-
-    Loser-only keys (reachable when a higher-confidence duplicate omits oracle
-    metadata) survive. Conflicting opaque values are not claimed to be monotonic.
-    """
     winner_ev = winner.get("evidence")
     loser_ev = loser.get("evidence")
     winner_dict = dict(winner_ev) if isinstance(winner_ev, dict) else {}

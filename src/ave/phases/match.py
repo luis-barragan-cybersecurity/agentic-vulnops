@@ -1,17 +1,3 @@
-"""Phase 2 — Match.
-
-The fan-in point for every finding source a run consults. Each source's findings are
-attributed (`source` is never blank), then findings from different sources that name the
-same flaw are merged on the pack's `(file, symbol)` key plus `kind`, keeping both sources
-and the higher confidence. The core only ever sees neutral `Finding` records.
-
-Sources today: whatever Intake already placed in `state["findings"]` (nothing yet — an
-external SARIF feed lands there when intake grows one) and the pack's own `find()`, which
-returns one `FindingBatch`. Match puts `kept` in `AVEState.findings`, `suppressed` in
-`AVEState.suppressed_findings`, and the batch report on the Match span. Assess ranks the
-kept batch and picks the head.
-"""
-
 from __future__ import annotations
 
 from typing import Any

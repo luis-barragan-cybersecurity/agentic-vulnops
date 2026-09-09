@@ -31,8 +31,8 @@
               "cited_spans": [
                 {
                   "file": "target/dvrestaurant/app/apis/referrals/service.py",
-                  "start_line": 91,
-                  "end_line": 91,
+                  "start_line": 84,
+                  "end_line": 95,
                   "contains": "user_id if user_id is not None else current_user.id"
                 }
               ]

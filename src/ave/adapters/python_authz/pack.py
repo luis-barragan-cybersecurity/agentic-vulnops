@@ -1,23 +1,3 @@
-"""`python_authz` — v1's language pack: Python + FastAPI, BOLA/BFLA.
-
-The first concrete `LanguagePack`. Ticket 03 (walking skeleton) drove it against one
-synthetic instance; ticket 04 repointed it at the real vendored target
-(`target/catalog.json`, 8 authorization instances + decoys, each bound to a by-path
-exploit oracle, inverted polarity). The four seam methods are what stay stable across that
-swap and across a future second-language pack (D3).
-
-The finding source is now the LLM finder (ticket 25): `find()` runs it over the code-facts
-store and returns one `FindingBatch` of the ownership and role gaps it rediscovers, each
-`ave:llm-finder` and citation-validated, offline by default (recorded fixtures). The
-finding at the loop anchor location I-04 (the `get_order` object-ownership gap) is bound
-to the pack's hermetic exploit oracle — modelled in-process by `_skeleton_target`, so
-`make check` runs without standing up the target's environment — so one finding per run
-is driven to a test-verified fix. Every other kept finding is real and reported but not
-yet drivable (`can_drive()` is False there); a generated exploit binds each in ticket 27,
-and the other by-path oracles run in the target's pinned env. The four seam methods stay
-stable across that deepening and a second pack (D3).
-"""
-
 from __future__ import annotations
 
 import difflib
@@ -40,8 +20,6 @@ from ave.adapters.python_authz.model import default_model_client
 from ave.state import Finding
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-#: The LLM finder's recorded transcripts — replayed offline so `find()` (and `make check`)
-#: need no model access; the live model is reached only on `AVE_LLM_LIVE` (see `model`).
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_finder"
 CULL_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_cull"
 _GET_ORDER = (
@@ -103,26 +81,9 @@ def _no_oracle(finding: Finding) -> NotImplementedError:
 
 
 class PythonAuthzPack:
-    """Python/FastAPI authorization pack. v1 scope: the vendored DVRestaurant catalog.
-
-    The LLM finder (ticket 25) reasons over the code-facts store and rediscovers the
-    ownership and role gaps a pattern scanner is blind to; `find()` returns them as one
-    `FindingBatch`. The finding that lands at the anchor location (I-04, `get_order`) is
-    bound to the pack's hermetic exploit oracle so the end-to-end loop still drives one
-    finding to a test-verified fix. Every other kept finding is real and reported, but
-    not yet drivable — a generated exploit binds it in ticket 27 — so `can_drive()` is
-    True only at the anchor location for now, and the seam widens there."""
-
     name = "python_authz"
 
     def find(self, target_ref: str) -> FindingBatch:
-        """Run the model finder, then one adversarial session per accepted finding.
-
-        Offline by default. The finding at the anchor location is enriched with the
-        loop's hermetic oracle before the cull, so a valid suppress cannot overturn a
-        bound oracle. The finder and the cull never read that binding (or the answer
-        key) to detect it.
-        """
         del target_ref
         store = CodeFactsStore.build()
         finder_client = default_model_client(FIXTURES_DIR)
@@ -134,15 +95,16 @@ class PythonAuthzPack:
         ]
         reviews = review_accepted(store, accepted, cull_client)
         by_key = {(review.location_key, review.kind): review for review in reviews}
-        findings = [candidate.finding for candidate in accepted]
-        kept, suppressed = partition_batch(findings, reviews)
-        kept = tuple(
+        findings = [
             attach_review(
-                finding,
-                by_key.get((location_key(finding), str(finding.get("kind", "")))),
+                candidate.finding,
+                by_key.get(
+                    (location_key(candidate.finding), str(candidate.finding.get("kind", "")))
+                ),
             )
-            for finding in kept
-        )
+            for candidate in accepted
+        ]
+        kept, suppressed = partition_batch(findings, reviews)
         attrs = report.to_attributes()
         attrs["cull"] = cull_attributes(reviews, client_mode=cull_client.name)
         return FindingBatch(kept=kept, suppressed=suppressed, report=attrs)
@@ -159,11 +121,15 @@ class PythonAuthzPack:
         return f"{file}:{tail}"
 
     def can_drive(self, finding: Finding) -> bool:
-        """Whether this pack can drive `finding` to a test-verified fix now: True only for
-        the finding bound to the loop's hermetic oracle (the anchor location). Ticket 27's
-        generated exploits widen this to any finding whose exploit flips."""
+        """True only for the current hard-coded anchor: recognized oracle evidence at
+        `catalog.anchor_location()`. Oracle keys alone do not make a finding drivable."""
+        if finding.get("location") != catalog.anchor_location():
+            return False
         evidence = finding.get("evidence", {})
-        return bool(isinstance(evidence, dict) and evidence.get("is_loop_anchor"))
+        if not isinstance(evidence, dict) or not evidence.get("is_loop_anchor"):
+            return False
+        oracle = evidence.get("oracle")
+        return isinstance(oracle, dict) and bool(oracle.get("path"))
 
     def _is_anchor(self, finding: Finding) -> bool:
         return self.can_drive(finding)

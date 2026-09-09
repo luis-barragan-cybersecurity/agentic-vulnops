@@ -412,10 +412,6 @@ def _escape_md_cell(value: object) -> str:
 
 
 def _ruled_out_rows(finding: dict[str, Any]) -> list[tuple[str, str]]:
-    """Validated ruled-out hypotheses on the selected kept finding only.
-
-    Finder-cleared handler ids and suppressed siblings never enter this projection.
-    """
     evidence = finding.get("evidence")
     review = evidence.get("counter_review") if isinstance(evidence, dict) else None
     if not isinstance(review, dict) or review.get("basis") != "validated":
@@ -438,8 +434,10 @@ def _hypothesis_how(hypothesis: dict[str, Any]) -> str:
     first = citations[0] if isinstance(citations[0], dict) else {}
     file = first.get("file", "?")
     start = first.get("start_line", "?")
+    end = first.get("end_line", start)
+    span = f"{file}:{start}" if start == end else f"{file}:{start}-{end}"
     contains = first.get("contains", "")
-    return f"`{file}:{start}` — {contains}"
+    return f"`{span}` — {contains}"
 
 
 def _cleared(finding: dict[str, Any]) -> list[str]:

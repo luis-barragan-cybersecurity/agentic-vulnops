@@ -31,8 +31,8 @@
               "cited_spans": [
                 {
                   "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
-                  "start_line": 26,
-                  "end_line": 26,
+                  "start_line": 12,
+                  "end_line": 27,
                   "contains": "update_user(db, user.username, user)"
                 }
               ]

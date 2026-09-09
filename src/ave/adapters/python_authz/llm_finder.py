@@ -1,30 +1,3 @@
-"""The LLM finder — the model-side finding source (ticket 25).
-
-This is the half of the find stage the deterministic layer (ticket 23) was built to carry:
-a model that rediscovers the ownership and role gaps a pattern scanner is blind to, reading
-only the code-facts store and never the answer key. It is **retrieve-then-reason, one
-candidate at a time** (find-stage design, decisions 3-6):
-
-* The pre-filter already dropped the handlers that cannot be a finding by arithmetic. The
-  finder iterates only ``store.candidates("examine")`` — the candidates a call can change
-  the answer for.
-* For each, a **fresh, stateless session** (`model.ModelClient.begin`) plans its own
-  retrieval through the typed tools under a **call budget**, then submits one structured
-  verdict. Context never accumulates across candidates; no session sees a previous verdict.
-  The store is the workspace, not the context window.
-* **Verdicts are validated at the submission boundary** (decision 5, from Mulder): a verdict
-  must cite the inventory record and the source line spans it claims about, and this module
-  checks that those spans resolve *and contain what is claimed* before a `Finding` is
-  produced. A verdict that fails is **rejected, not down-weighted** — an architectural
-  invariant, not a prompt instruction.
-
-Every finding this produces carries ``source = "ave:llm-finder"`` and a `location` in the
-target's own path scheme (``app/...:symbol``), so it merges and de-dups with any other
-source on the same flaw (ticket 24). The finder never drives the fix or the exploit — it is
-a finding *source*; binding a finding to a generated exploit is ticket 27, and measuring its
-blast radius is ticket 28.
-"""
-
 from __future__ import annotations
 
 import json
@@ -118,22 +91,12 @@ class Rejection:
 
 @dataclass(frozen=True)
 class AcceptedCandidate:
-    """A minted finding paired with the inventory record it was judged against.
-
-    Cull sessions consume these pairs so accepted identity stays the trusted record,
-    not a later lookup through a compatibility findings view.
-    """
-
     record: InventoryRecord
     finding: Finding
 
 
 @dataclass(frozen=True)
 class FindReport:
-    """Everything one finder pass produced: the accepted pairs, the candidates cleared as
-    benign, the rejected verdicts, and the coverage denominator. `findings` is a
-    compatibility view; cull receives `accepted`."""
-
     accepted: list[AcceptedCandidate] = field(default_factory=list)
     cleared: list[str] = field(default_factory=list)
     rejected: list[Rejection] = field(default_factory=list)
@@ -370,9 +333,7 @@ class LLMFinder:
 
     # -- the submission boundary ----------------------------------------------------
     def _accept(self, record: InventoryRecord, verdict: Verdict) -> Finding | None:
-        """Validate the verdict's citations against the store and, if it is a finding, mint a
-        neutral `Finding`. Rejection is total: a citation that does not resolve to what it
-        claims yields no finding, whatever the verdict's confidence."""
+        require_identity(verdict.handler_id, record.handler_id, label="cited handler")
         if not verdict.is_finding:
             return None
         self._validate(record, verdict)

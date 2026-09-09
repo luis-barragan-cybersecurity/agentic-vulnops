@@ -35,25 +35,14 @@ def make_span(phase: str, started_at: str, attributes: dict[str, Any]) -> dict[s
 
 
 def _span_start(spans: list[dict[str, Any]], phase: str) -> str | None:
-    """The start timestamp of the first span for `phase`, if the phase ran."""
     return next((s.get("started_at") for s in spans if s.get("phase") == phase), None)
 
 
 def _span_end(spans: list[dict[str, Any]], phase: str) -> str | None:
-    """The end timestamp of the first span for `phase`, if the phase ran."""
     return next((s.get("ended_at") for s in spans if s.get("phase") == phase), None)
 
 
 def _finding_lifecycles(state: AVEState) -> list[FindingLifecycle]:
-    """One lifecycle per finding the run ingested, synthesized from the run's spans.
-
-    `first_observed_at` is first-observed-in-run — the run's own start (intake) — for every
-    finding, since Match saw them all at once. Only the selected head was remediatively
-    triaged: its `triaged_at` is when Decide produced the record, and its `verified_at` is
-    set only if the ladder greened and the PR is ready-to-merge. Kept siblings stay `open`.
-    Suppressed findings are `false_positive` with `triaged_at` at Match completion. They
-    do not enter ranking or Still open. Metrics exclude them from the found count.
-    """
     spans = state.get("spans", [])
     first_observed = _span_start(spans, "intake") or _span_start(spans, "match")
     if first_observed is None:

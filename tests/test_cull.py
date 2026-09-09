@@ -1,5 +1,3 @@
-"""Adversarial cull: fail-open resolution, fixture replay, and session boundaries."""
-
 from __future__ import annotations
 
 import json
@@ -14,10 +12,12 @@ from ave.adapters.python_authz.cull import (
     Stance,
     SubmittedStance,
     _execute,
+    attach_review,
     fail_open,
     partition_batch,
     redacted_case,
     resolve_submitted,
+    review_accepted,
     review_one,
 )
 from ave.adapters.python_authz.llm_finder import AcceptedCandidate, LLMFinder
@@ -126,6 +126,20 @@ def test_default_fixture_replay_keeps_eight_with_no_suppress_or_fail_open() -> N
     assert cull["fail_open"] == 0
     assert cull["bound_oracle_overrides"] == 0
     assert cull["client"] == "fixture"
+    for finding in batch.kept:
+        review = finding["evidence"]["counter_review"]
+        assert review["submitted"]["stance"] == "keep"
+        assert review["effective"] == "keep"
+        assert review["reason"]
+        assert review["citations"]
+        assert review["hypotheses"]
+        assert review["basis"] == "validated"
+        assert review["prompt_versions"]
+        assert review["client_mode"] == "fixture"
+        assert any(hyp["kind"] == "ruled_out" for hyp in review["hypotheses"])
+        cite = review["hypotheses"][0]["citations"][0]
+        assert cite["end_line"] >= cite["start_line"]
+        assert cite["end_line"] > cite["start_line"]
     for review in cull["reviews"]:
         assert review["effective"] == "keep"
         assert review["basis"] == "validated"
@@ -297,3 +311,209 @@ def test_session_error_fail_opens_keep() -> None:
     assert review.submitted is None
     assert review.effective == "keep"
     assert review.basis == "fail_open_session_error"
+
+
+def _non_anchor_candidate() -> AcceptedCandidate:
+    store = CodeFactsStore.build()
+    report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
+    other = next(c for c in report.accepted if c.record.symbol != "get_order")
+    return other
+
+
+def _cited_review(
+    candidate: AcceptedCandidate,
+    *,
+    stance: Stance,
+    hyp_kind: str,
+    reason: str = "cited argument",
+    hypotheses: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    evidence = candidate.finding.get("evidence", {})
+    cites = list(evidence.get("citations") or [])
+    payload: dict[str, Any] = {
+        "location": candidate.finding["location"],
+        "kind": candidate.finding["kind"],
+        "stance": stance,
+        "reason": reason,
+        "cited_spans": cites,
+    }
+    if hypotheses is not None:
+        payload["hypotheses"] = hypotheses
+    else:
+        payload["hypotheses"] = [
+            {"kind": hyp_kind, "claim": "a cited claim", "cited_spans": cites}
+        ]
+    return payload
+
+
+def _submit_client(payload: dict[str, Any]) -> _ScriptedClient:
+    return _ScriptedClient(
+        _ScriptedSession([[ToolCall("submit_review", payload)]])
+    )
+
+
+def test_review_one_suppress_without_oracle_is_suppressed() -> None:
+    candidate = _non_anchor_candidate()
+    assert not (candidate.finding.get("evidence") or {}).get("oracle")
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(
+            _cited_review(candidate, stance="suppress", hyp_kind="supports_suppress")
+        ),
+        budget=8,
+        prompt_versions={"python_authz.llm_cull.system": 1},
+    )
+    assert review.submitted is not None
+    assert review.submitted.stance == "suppress"
+    assert review.effective == "suppress"
+    assert review.basis == "validated"
+    attached = attach_review(candidate.finding, review)
+    payload = attached["evidence"]["counter_review"]
+    assert payload["submitted"]["stance"] == "suppress"
+    assert payload["effective"] == "suppress"
+    assert payload["reason"]
+    assert payload["citations"]
+    assert payload["hypotheses"]
+    assert payload["basis"] == "validated"
+    assert payload["prompt_versions"] == {"python_authz.llm_cull.system": 1}
+    assert payload["client_mode"] == "fixture"
+    kept, suppressed = partition_batch([attached], [review])
+    assert kept == ()
+    assert suppressed == (attached,)
+
+
+def test_review_one_suppress_against_bound_anchor_keeps_with_bound_oracle() -> None:
+    candidate = _anchor_candidate()
+    assert candidate.finding["evidence"]["oracle"]
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(
+            _cited_review(candidate, stance="suppress", hyp_kind="supports_suppress")
+        ),
+        budget=8,
+        prompt_versions={"python_authz.llm_cull.system": 1},
+    )
+    assert review.submitted is not None
+    assert review.submitted.stance == "suppress"
+    assert review.effective == "keep"
+    assert review.basis == "bound_oracle"
+
+
+def test_blank_reason_fail_opens_invalid() -> None:
+    candidate = _non_anchor_candidate()
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(
+            _cited_review(
+                candidate,
+                stance="keep",
+                hyp_kind="ruled_out",
+                reason="   ",
+            )
+        ),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+    assert "reason" in review.reason
+
+
+def test_missing_hypotheses_fail_opens_invalid() -> None:
+    candidate = _non_anchor_candidate()
+    payload = _cited_review(candidate, stance="keep", hyp_kind="ruled_out")
+    del payload["hypotheses"]
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(payload),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+    assert "hypothesis" in review.reason
+
+
+def test_keep_with_supports_suppress_hypothesis_fail_opens_invalid() -> None:
+    candidate = _non_anchor_candidate()
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(
+            _cited_review(candidate, stance="keep", hyp_kind="supports_suppress")
+        ),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+
+
+def test_suppress_with_ruled_out_hypothesis_fail_opens_invalid() -> None:
+    candidate = _non_anchor_candidate()
+    review = review_one(
+        CodeFactsStore.build(),
+        candidate,
+        _submit_client(_cited_review(candidate, stance="suppress", hyp_kind="ruled_out")),
+        budget=8,
+        prompt_versions={},
+    )
+    assert review.submitted is None
+    assert review.effective == "keep"
+    assert review.basis == "fail_open_invalid"
+
+
+def test_review_accepted_opens_a_fresh_empty_session_per_candidate() -> None:
+    store = CodeFactsStore.build()
+    report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
+    accepted = report.accepted[:3]
+    begins: list[str] = []
+    first_results: list[list[ToolResult]] = []
+
+    class _SpySession:
+        def __init__(self) -> None:
+            self._first = True
+
+        def respond(self, results: Sequence[ToolResult]) -> list[ToolCall]:
+            if self._first:
+                first_results.append(list(results))
+                self._first = False
+            return []
+
+    class _SpyClient:
+        name = "spy"
+
+        def begin(self, **kwargs: Any) -> _SpySession:
+            begins.append(str(kwargs["candidate_id"]))
+            return _SpySession()
+
+    reviews = review_accepted(store, accepted, _SpyClient())
+    assert begins == [candidate.record.handler_id for candidate in accepted]
+    assert len(first_results) == len(accepted)
+    assert all(results == [] for results in first_results)
+    assert len(reviews) == len(accepted)
+
+
+def test_cull_setup_failure_fail_opens_each_accepted(monkeypatch: Any) -> None:
+    store = CodeFactsStore.build()
+    report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
+    accepted = report.accepted[:2]
+
+    def _boom() -> dict[str, int]:
+        raise KeyError("cull prompts unavailable")
+
+    monkeypatch.setattr(
+        "ave.adapters.python_authz.cull.prompt_versions", _boom
+    )
+    reviews = review_accepted(store, accepted, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    assert len(reviews) == 2
+    assert {review.basis for review in reviews} == {"fail_open_unavailable"}
+    assert all(review.effective == "keep" for review in reviews)
+    assert all(review.submitted is None for review in reviews)

@@ -94,9 +94,6 @@ def test_catalog_ground_truth_holds_every_seeded_instance() -> None:
 
 
 def test_find_rediscovers_gaps_and_binds_one_drivable_anchor() -> None:
-    # The LLM finder (ticket 25) is the source now: find() returns a batch of rediscovered
-    # gaps, all attributed to the model, and binds exactly the one at the anchor location
-    # to the loop's hermetic oracle so a single finding per run stays drivable.
     batch = get_default_pack().find("target/dvrestaurant@d32d0997")
     findings = list(batch.kept)
     assert len(findings) > 1

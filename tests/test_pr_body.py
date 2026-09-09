@@ -283,6 +283,39 @@ def test_cleared_comes_from_validated_ruled_out_on_the_selected_finding() -> Non
         assert str(finding.get("id")) not in cleared
 
 
+def test_cleared_citation_renders_inclusive_range() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    selected = dict(final["selected_finding"])
+    evidence = dict(selected.get("evidence") or {})
+    evidence["counter_review"] = {
+        "basis": "validated",
+        "hypotheses": [
+            {
+                "kind": "ruled_out",
+                "claim": "span claim",
+                "citations": [
+                    {
+                        "file": "app/x.py",
+                        "start_line": 10,
+                        "end_line": 20,
+                        "contains": "return db_order",
+                    }
+                ],
+            }
+        ],
+    }
+    selected["evidence"] = evidence
+    body = render_pr_body({**final, "selected_finding": selected})
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    assert "`app/x.py:10-20` — return db_order" in cleared
+
+    evidence["counter_review"]["hypotheses"][0]["citations"][0]["end_line"] = 10
+    selected["evidence"] = evidence
+    body = render_pr_body({**final, "selected_finding": selected})
+    cleared = body[body.find("### Cleared") : body.find("### Before you merge")]
+    assert "`app/x.py:10` — return db_order" in cleared
+
+
 def test_cleared_stays_honest_empty_without_validated_ruled_out() -> None:
     final = run_once(_INITIAL, auto_approve=True)
     selected = dict(final["selected_finding"])

@@ -169,8 +169,6 @@ def test_verdict_citing_an_unknown_handler_is_rejected() -> None:
 
 
 def test_verdict_for_a_different_resolvable_handler_is_rejected() -> None:
-    """Accepted identity is the judged record. A different handler that the store can
-    resolve is still a rejection — resolution is not identity."""
     other_id = (
         "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status"
     )
@@ -202,7 +200,21 @@ def test_a_cleared_verdict_yields_no_finding_but_is_not_rejected() -> None:
     store = CodeFactsStore.build()
     finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
     record = store.get_handler(_ANCHOR_HANDLER)
-    assert finder._accept(record, _verdict(is_finding=False)) is None
+    assert finder._accept(record, _verdict(is_finding=False, cited_spans=[])) is None
+
+
+def test_clear_verdict_for_a_different_resolvable_handler_is_rejected() -> None:
+    other_id = (
+        "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status"
+    )
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    assert store.get_handler(other_id).handler_id != record.handler_id
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(
+            record, _verdict(is_finding=False, handler_id=other_id, cited_spans=[])
+        )
 
 
 # --- isolation: the answer key is unreachable through the tools --------------------------

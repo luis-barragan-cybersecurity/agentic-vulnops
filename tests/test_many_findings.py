@@ -1,12 +1,3 @@
-"""Many findings in, one remediated out (ticket 24).
-
-Guards the run shape the find-stage design fixed: every finding names its source, findings
-from different sources that name the same flaw merge into one keeping both sources, a
-thin *stated* rank function picks the head and says why, and every ingested finding gets
-an honest lifecycle in the run record. The live pack now returns many LLM-finder findings
-in one `FindingBatch`; suppressed findings stay off the ranking list.
-"""
-
 from __future__ import annotations
 
 import json
@@ -111,11 +102,6 @@ def test_same_location_different_kind_does_not_merge() -> None:
 
 
 def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
-    """A higher-confidence duplicate can omit oracle keys the loser already bound.
-
-    The winner keeps conflicting values. Loser-only keys survive. This does not claim
-    that conflicting opaque evidence is monotonic.
-    """
     winner = _finding(
         "high",
         confidence=0.9,
@@ -142,6 +128,37 @@ def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
         "polarity": "inverted",
     }
     assert evidence["is_loop_anchor"] is True
+
+
+def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
+    pack = get_default_pack()
+    smuggled = _finding(
+        "other",
+        location="app/other.py:handler",
+        evidence={
+            "is_loop_anchor": True,
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+        },
+    )
+    assert pack.can_drive(smuggled) is False
+    winner = _finding(
+        "high",
+        location="app/other.py:handler",
+        confidence=0.9,
+        evidence={"rationale": "from winner"},
+    )
+    loser = _finding(
+        "low",
+        location="app/other.py:handler",
+        confidence=0.4,
+        evidence={
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+            "is_loop_anchor": True,
+        },
+    )
+    merged = merge_findings([loser, winner], location_key=_by_location)
+    assert merged[0]["evidence"]["is_loop_anchor"] is True
+    assert pack.can_drive(merged[0]) is False
 
 
 def test_merge_preserves_ingest_order_and_folds_transitively() -> None:

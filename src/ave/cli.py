@@ -76,9 +76,6 @@ def _scoreboard(_: argparse.Namespace) -> int:
 
 
 def _inventory(_: argparse.Namespace) -> int:
-    """Show the deterministic find-stage inventory: the coverage denominator and each route
-    handler's pre-filter screen. No model is involved — this is the evidence layer the LLM
-    finder (ticket 25) reasons over, made inspectable on its own (ticket 23)."""
     from ave.adapters.python_authz.code_facts import CodeFactsStore
 
     store = CodeFactsStore.build()
@@ -96,12 +93,6 @@ def _inventory(_: argparse.Namespace) -> int:
 
 
 def _find(_: argparse.Namespace) -> int:
-    """Run the pack-owned find operation and show what it rediscovered (ticket 25/26).
-
-    This is the same `LanguagePack.find()` path Match walks. Offline by default — the
-    finder replays recorded transcripts, so this needs no model access — and
-    citation-validated at the submission boundary. Set `AVE_LLM_LIVE=1` to reach the
-    live model instead of the fixtures."""
     from ave.adapters import get_default_pack
 
     batch = get_default_pack().find(str(initial_run_state().get("target_ref", "unset")))
@@ -109,12 +100,23 @@ def _find(_: argparse.Namespace) -> int:
     if isinstance(coverage, dict) and coverage.get("summary"):
         print(f"find: {coverage['summary']}.")
     print(
-        f"  {len(batch.kept)} findings, {batch.report.get('cleared', 0)} cleared, "
-        f"{batch.report.get('rejected', 0)} rejected verdicts "
-        "(rejected, not down-weighted)."
+        f"  finder: {batch.report.get('found', 0)} accepted, "
+        f"{batch.report.get('cleared', 0)} finder-cleared, "
+        f"{batch.report.get('rejected', 0)} rejected, "
+        f"{batch.report.get('budget_exhausted', 0)} exhausted."
     )
-    if batch.suppressed:
-        print(f"  {len(batch.suppressed)} suppressed by adversarial cull.")
+    cull = batch.report.get("cull")
+    if isinstance(cull, dict):
+        line = (
+            f"  adversarial-cull: {cull.get('reviewed', 0)} reviewed, "
+            f"{cull.get('kept', 0)} kept, "
+            f"{cull.get('suppressed', 0)} suppressed, "
+            f"{cull.get('fail_open', 0)} fail-open"
+        )
+        overrides = cull.get("bound_oracle_overrides", 0)
+        if overrides:
+            line += f", {overrides} bound-oracle overrides"
+        print(f"{line}.")
     for finding in batch.kept:
         evidence = finding.get("evidence", {})
         kind = str(finding.get("kind", ""))
@@ -142,7 +144,11 @@ def main(argv: list[str] | None = None) -> int:
         ("eradicate", _eradicate, "break -> run -> HITL approve -> PR (demo)"),
         ("scoreboard", _scoreboard, "regenerate the results table from run records"),
         ("inventory", _inventory, "deterministic find-stage inventory + coverage"),
-        ("find", _find, "run the LLM finder over the inventory (offline fixtures)"),
+        (
+            "find",
+            _find,
+            "run the LLM finder and adversarial cull over the inventory (offline fixtures)",
+        ),
     ):
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(handler=handler)

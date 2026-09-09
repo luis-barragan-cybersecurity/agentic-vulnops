@@ -1,12 +1,3 @@
-"""Adversarial cull types and fail-open resolution (ticket 26).
-
-The argument is advisory. The oracle is dispositive. A missing, invalid, exhausted,
-unavailable, or failed session has no fabricated submitted stance and resolves to keep.
-A valid suppress against bound independent oracle evidence records the suppress argument
-and still resolves to keep. It cannot lower confidence, remove oracle metadata, or make
-the finding non-drivable.
-"""
-
 from __future__ import annotations
 
 import json
@@ -83,8 +74,6 @@ _FORBIDDEN_CASE_KEYS = frozenset(
 
 @dataclass(frozen=True)
 class Hypothesis:
-    """One cited explanation: a benign pattern ruled out, or support for suppress."""
-
     kind: HypothesisKind
     claim: str
     citations: tuple[Citation, ...]
@@ -99,8 +88,6 @@ class Hypothesis:
 
 @dataclass(frozen=True)
 class SubmittedStance:
-    """A citation-valid keep or suppress argument. Fail-open reviews have none."""
-
     stance: Stance
     reason: str
     citations: tuple[Citation, ...]
@@ -117,13 +104,6 @@ class SubmittedStance:
 
 @dataclass(frozen=True)
 class CounterReview:
-    """One adversarial decision for an accepted finding.
-
-    Identity is the stable `(location_key, kind)` plus `source`. `submitted` is the
-    model argument when validation passed; `effective` is keep unless a validated
-    suppress landed on a finding with no bound independent oracle.
-    """
-
     location_key: str
     kind: str
     source: str
@@ -169,7 +149,6 @@ def fail_open(
     prompt_versions: dict[str, int],
     client_mode: str,
 ) -> CounterReview:
-    """Keep with no fabricated submitted stance. `basis` must be a named fail-open."""
     if basis not in FAIL_OPEN_BASES:
         raise ValueError(f"{basis} is not a fail-open basis")
     return CounterReview(
@@ -195,7 +174,6 @@ def resolve_submitted(
     prompt_versions: dict[str, int],
     client_mode: str,
 ) -> CounterReview:
-    """Apply a citation-valid stance. Bound-oracle suppress records the argument and keeps."""
     if submitted.stance == "suppress" and has_bound_oracle(finding):
         effective: Disposition = "keep"
         basis: ReviewBasis = "bound_oracle"
@@ -220,7 +198,6 @@ def resolve_submitted(
 def partition_batch(
     findings: Sequence[Finding], reviews: Sequence[CounterReview]
 ) -> tuple[tuple[Finding, ...], tuple[Finding, ...]]:
-    """Split accepted findings into kept and suppressed. No review means keep."""
     by_key = {(review.location_key, review.kind): review for review in reviews}
     kept: list[Finding] = []
     suppressed: list[Finding] = []
@@ -337,7 +314,14 @@ CULL_TOOL_SCHEMAS: list[dict[str, Any]] = [
                     },
                 },
             },
-            "required": ["location", "kind", "stance", "reason", "cited_spans"],
+            "required": [
+                "location",
+                "kind",
+                "stance",
+                "reason",
+                "cited_spans",
+                "hypotheses",
+            ],
         },
     },
 ]
@@ -355,7 +339,6 @@ def location_key(finding: Finding) -> str:
 
 
 def redacted_case(candidate: AcceptedCandidate) -> dict[str, Any]:
-    """The only case the model sees. Oracle, catalog, and confidence stay off this path."""
     finding = candidate.finding
     record = candidate.record
     evidence = finding.get("evidence")
@@ -385,8 +368,22 @@ def review_accepted(
     *,
     budget: int = DEFAULT_CALL_BUDGET,
 ) -> list[CounterReview]:
-    """One fresh session per accepted finding, including the oracle-bound anchor."""
-    versions = prompt_versions()
+    try:
+        versions = prompt_versions()
+        load_prompt(_SYSTEM_PROMPT_ID)
+        load_prompt(_CANDIDATE_PROMPT_ID)
+    except Exception as exc:
+        return [
+            fail_open(
+                candidate.finding,
+                basis="fail_open_unavailable",
+                reason=str(exc),
+                location_key=location_key(candidate.finding),
+                prompt_versions={},
+                client_mode=client.name,
+            )
+            for candidate in accepted
+        ]
     return [
         review_one(
             store,
@@ -422,6 +419,7 @@ def review_one(
                 case=json.dumps(redacted_case(candidate), indent=2)
             ),
             tools=CULL_TOOL_SCHEMAS,
+            terminal_tool=SUBMIT_REVIEW,
         )
     except FileNotFoundError as exc:
         return fail_open(
@@ -462,17 +460,12 @@ def review_one(
 
 
 def attach_review(finding: Finding, review: CounterReview | None) -> Finding:
-    """Copy validated review hypotheses onto the finding for the PR Cleared projection."""
     if review is None:
         return finding
     attached = dict(finding)
     raw = attached.get("evidence", {})
     evidence = dict(raw) if isinstance(raw, dict) else {}
-    evidence["counter_review"] = {
-        "basis": review.basis,
-        "effective": review.effective,
-        "hypotheses": [hypothesis.to_dict() for hypothesis in review.hypotheses],
-    }
+    evidence["counter_review"] = review.to_dict()
     attached["evidence"] = evidence
     return cast("Finding", attached)
 
@@ -541,15 +534,28 @@ def _parse_submitted(
     stance = str(args.get("stance", ""))
     if stance not in _ALLOWED_STANCES:
         raise CitationRejected(f"stance {stance!r} is not keep or suppress")
+    reason = str(args.get("reason", "")).strip()
+    if not reason:
+        raise CitationRejected("reason must be non-empty")
     citations = tuple(Citation.from_dict(item) for item in args.get("cited_spans", []))
     validate_citations(store, citations)
+    if "hypotheses" not in args:
+        raise CitationRejected("at least one hypothesis is required")
     hypotheses = tuple(
-        _parse_hypothesis(store, item) for item in args.get("hypotheses", [])
+        _parse_hypothesis(store, item) for item in args.get("hypotheses") or []
     )
+    if not hypotheses:
+        raise CitationRejected("at least one hypothesis is required")
+    kinds = {hypothesis.kind for hypothesis in hypotheses}
     typed_stance: Stance = "keep" if stance == "keep" else "suppress"
+    expected = "ruled_out" if typed_stance == "keep" else "supports_suppress"
+    if kinds != {expected}:
+        raise CitationRejected(
+            f"{typed_stance} requires only {expected} hypotheses, got {sorted(kinds)}"
+        )
     return SubmittedStance(
         stance=typed_stance,
-        reason=str(args.get("reason", "")),
+        reason=reason,
         citations=citations,
         hypotheses=hypotheses,
     )
@@ -559,6 +565,9 @@ def _parse_hypothesis(store: Any, data: dict[str, Any]) -> Hypothesis:
     kind = str(data.get("kind", ""))
     if kind not in _ALLOWED_HYPOTHESES:
         raise CitationRejected(f"hypothesis kind {kind!r} is not allowed")
+    claim = str(data.get("claim", "")).strip()
+    if not claim:
+        raise CitationRejected("hypothesis claim must be non-empty")
     citations = tuple(Citation.from_dict(item) for item in data.get("cited_spans", []))
     validate_citations(store, citations)
     typed_kind: HypothesisKind = (
@@ -566,7 +575,7 @@ def _parse_hypothesis(store: Any, data: dict[str, Any]) -> Hypothesis:
     )
     return Hypothesis(
         kind=typed_kind,
-        claim=str(data.get("claim", "")),
+        claim=claim,
         citations=citations,
     )
 

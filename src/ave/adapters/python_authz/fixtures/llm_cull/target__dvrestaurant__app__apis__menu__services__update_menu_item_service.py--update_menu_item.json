@@ -31,8 +31,8 @@
               "cited_spans": [
                 {
                   "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
-                  "start_line": 19,
-                  "end_line": 19,
+                  "start_line": 15,
+                  "end_line": 24,
                   "contains": "Depends(get_current_user)"
                 }
               ]

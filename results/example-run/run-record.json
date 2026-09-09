@@ -1,12 +1,12 @@
 {
-  "run_id": "4ade30d1f45f47658a8a9ef002d12f91",
+  "run_id": "929fc438ab034daab1f6b5facf805517",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-09T01:44:53.573125+00:00",
-      "ended_at": "2026-09-09T01:44:53.584580+00:00",
+      "started_at": "2026-09-09T02:16:21.081146+00:00",
+      "ended_at": "2026-09-09T02:16:21.093718+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,8 +14,8 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-09T01:44:53.585303+00:00",
-      "ended_at": "2026-09-09T01:44:53.723219+00:00",
+      "started_at": "2026-09-09T02:16:21.094781+00:00",
+      "ended_at": "2026-09-09T02:16:21.245897+00:00",
       "attributes": {
         "found": 8,
         "ingested": 8,
@@ -81,8 +81,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
-                          "start_line": 27,
-                          "end_line": 27,
+                          "start_line": 21,
+                          "end_line": 37,
                           "contains": "get_user_by_username(db, user.username)"
                         }
                       ]
@@ -106,8 +106,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
-                        "start_line": 27,
-                        "end_line": 27,
+                        "start_line": 21,
+                        "end_line": 37,
                         "contains": "get_user_by_username(db, user.username)"
                       }
                     ]
@@ -142,8 +142,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
-                          "start_line": 15,
-                          "end_line": 15,
+                          "start_line": 12,
+                          "end_line": 19,
                           "contains": "Depends(get_current_user)"
                         }
                       ]
@@ -167,8 +167,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
-                        "start_line": 15,
-                        "end_line": 15,
+                        "start_line": 12,
+                        "end_line": 19,
                         "contains": "Depends(get_current_user)"
                       }
                     ]
@@ -203,8 +203,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
-                          "start_line": 19,
-                          "end_line": 19,
+                          "start_line": 15,
+                          "end_line": 24,
                           "contains": "Depends(get_current_user)"
                         }
                       ]
@@ -228,8 +228,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py",
-                        "start_line": 19,
-                        "end_line": 19,
+                        "start_line": 15,
+                        "end_line": 24,
                         "contains": "Depends(get_current_user)"
                       }
                     ]
@@ -264,7 +264,7 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
-                          "start_line": 20,
+                          "start_line": 11,
                           "end_line": 20,
                           "contains": "return db_order"
                         }
@@ -289,7 +289,7 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
-                        "start_line": 20,
+                        "start_line": 11,
                         "end_line": 20,
                         "contains": "return db_order"
                       }
@@ -325,8 +325,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
-                          "start_line": 30,
-                          "end_line": 30,
+                          "start_line": 12,
+                          "end_line": 36,
                           "contains": "db.query(Order)"
                         }
                       ]
@@ -350,8 +350,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
-                        "start_line": 30,
-                        "end_line": 30,
+                        "start_line": 12,
+                        "end_line": 36,
                         "contains": "db.query(Order)"
                       }
                     ]
@@ -386,8 +386,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/referrals/service.py",
-                          "start_line": 91,
-                          "end_line": 91,
+                          "start_line": 84,
+                          "end_line": 95,
                           "contains": "user_id if user_id is not None else current_user.id"
                         }
                       ]
@@ -411,8 +411,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/referrals/service.py",
-                        "start_line": 91,
-                        "end_line": 91,
+                        "start_line": 84,
+                        "end_line": 95,
                         "contains": "user_id if user_id is not None else current_user.id"
                       }
                     ]
@@ -447,8 +447,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/referrals/service.py",
-                          "start_line": 46,
-                          "end_line": 46,
+                          "start_line": 38,
+                          "end_line": 51,
                           "contains": "UserModel.username == username"
                         }
                       ]
@@ -472,8 +472,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/referrals/service.py",
-                        "start_line": 46,
-                        "end_line": 46,
+                        "start_line": 38,
+                        "end_line": 51,
                         "contains": "UserModel.username == username"
                       }
                     ]
@@ -508,8 +508,8 @@
                       "citations": [
                         {
                           "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
-                          "start_line": 26,
-                          "end_line": 26,
+                          "start_line": 12,
+                          "end_line": 27,
                           "contains": "update_user(db, user.username, user)"
                         }
                       ]
@@ -533,8 +533,8 @@
                     "citations": [
                       {
                         "file": "target/dvrestaurant/app/apis/users/services/update_user_role_service.py",
-                        "start_line": 26,
-                        "end_line": 26,
+                        "start_line": 12,
+                        "end_line": 27,
                         "contains": "update_user(db, user.username, user)"
                       }
                     ]
@@ -554,8 +554,8 @@
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-09T01:44:53.723912+00:00",
-      "ended_at": "2026-09-09T01:44:53.723957+00:00",
+      "started_at": "2026-09-09T02:16:21.246461+00:00",
+      "ended_at": "2026-09-09T02:16:21.246590+00:00",
       "attributes": {
         "selected": true,
         "selection": {
@@ -654,8 +654,8 @@
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-09T01:44:53.725082+00:00",
-      "ended_at": "2026-09-09T01:44:53.729705+00:00",
+      "started_at": "2026-09-09T02:16:21.247737+00:00",
+      "ended_at": "2026-09-09T02:16:21.250671+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -664,24 +664,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-09T01:44:53.732642+00:00",
-      "ended_at": "2026-09-09T01:44:53.732769+00:00",
+      "started_at": "2026-09-09T02:16:21.252754+00:00",
+      "ended_at": "2026-09-09T02:16:21.252879+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-09T01:44:53.733375+00:00",
-      "ended_at": "2026-09-09T01:44:53.733380+00:00",
+      "started_at": "2026-09-09T02:16:21.253394+00:00",
+      "ended_at": "2026-09-09T02:16:21.253399+00:00",
       "attributes": {
-        "pr_ref": "local:pr/4ade30d1f45f47658a8a9ef002d12f91"
+        "pr_ref": "local:pr/929fc438ab034daab1f6b5facf805517"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-09T01:44:53.734346+00:00",
-      "ended_at": "2026-09-09T01:44:53.734362+00:00",
+      "started_at": "2026-09-09T02:16:21.254244+00:00",
+      "ended_at": "2026-09-09T02:16:21.254266+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -691,7 +691,7 @@
   "findings": [
     {
       "finding_id": "ave-llm-update_profile_service-update_profile",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -699,7 +699,7 @@
     },
     {
       "finding_id": "ave-llm-delete_menu_item_service-delete_menu_item",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -707,7 +707,7 @@
     },
     {
       "finding_id": "ave-llm-update_menu_item_service-update_menu_item",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -715,15 +715,15 @@
     },
     {
       "finding_id": "ave-llm-get_order_service-get_order",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
-      "triaged_at": "2026-09-09T01:44:53.725082+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
+      "triaged_at": "2026-09-09T02:16:21.247737+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
     },
     {
       "finding_id": "ave-llm-get_orders_for_delivery_service-get_orders",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -731,7 +731,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_discount_coupons",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -739,7 +739,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_referral_code_endpoint",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -747,7 +747,7 @@
     },
     {
       "finding_id": "ave-llm-update_user_role_service-update_user_role",
-      "first_observed_at": "2026-09-09T01:44:53.573125+00:00",
+      "first_observed_at": "2026-09-09T02:16:21.081146+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",

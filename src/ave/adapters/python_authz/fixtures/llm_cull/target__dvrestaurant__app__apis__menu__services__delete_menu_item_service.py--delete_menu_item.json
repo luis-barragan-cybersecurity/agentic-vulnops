@@ -31,8 +31,8 @@
               "cited_spans": [
                 {
                   "file": "target/dvrestaurant/app/apis/menu/services/delete_menu_item_service.py",
-                  "start_line": 15,
-                  "end_line": 15,
+                  "start_line": 12,
+                  "end_line": 19,
                   "contains": "Depends(get_current_user)"
                 }
               ]

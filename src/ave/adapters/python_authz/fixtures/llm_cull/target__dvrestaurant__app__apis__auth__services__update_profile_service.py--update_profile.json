@@ -31,8 +31,8 @@
               "cited_spans": [
                 {
                   "file": "target/dvrestaurant/app/apis/auth/services/update_profile_service.py",
-                  "start_line": 27,
-                  "end_line": 27,
+                  "start_line": 21,
+                  "end_line": 37,
                   "contains": "get_user_by_username(db, user.username)"
                 }
               ]

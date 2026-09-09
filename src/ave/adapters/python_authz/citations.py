@@ -1,11 +1,3 @@
-"""Shared citation identity for the pack's model verdicts.
-
-The finder and the adversarial cull both accept a structured claim only when its citations
-resolve through the code-facts store and name the record or finding under review. A
-resolvable *other* handler is still a rejection: accepted identity is the judged candidate,
-not any id the store happens to know.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -19,9 +11,6 @@ class CitationRejected(Exception):
 
 @dataclass(frozen=True)
 class Citation:
-    """One evidence reference a verdict must stand behind: a source span and the text it
-    claims is there. Validated against the store before the verdict is accepted."""
-
     file: str
     start_line: int
     end_line: int
@@ -46,11 +35,6 @@ class Citation:
 
 
 def require_identity(submitted: str, expected: str, *, label: str) -> None:
-    """Reject a claim that names a different identity than the one under review.
-
-    Resolution of the submitted id is not enough. The judged record is the trusted
-    identity; a different but resolvable handler is still a miss.
-    """
     if submitted != expected:
         raise CitationRejected(
             f"{label} {submitted!r} is not the judged {expected!r}"
@@ -58,7 +42,6 @@ def require_identity(submitted: str, expected: str, *, label: str) -> None:
 
 
 def validate_citations(store: Any, citations: Sequence[Citation]) -> None:
-    """Reject an empty citation list or any span that does not contain its claimed text."""
     if not citations:
         raise CitationRejected("at least one citation is required")
     for citation in citations:
@@ -87,8 +70,4 @@ def _validate_citation(store: Any, citation: Citation) -> None:
 
 
 def _normalize(text: str) -> str:
-    """Collapse whitespace so a citation's `contains` need not reproduce indentation.
-
-    The claim is about what the line says, not its column.
-    """
     return " ".join(text.split())
