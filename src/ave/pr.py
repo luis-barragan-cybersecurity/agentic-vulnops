@@ -404,21 +404,48 @@ def _still_open(
     return lines
 
 
+def _escape_md_cell(value: object) -> str:
+    """Neutralize model-authored table cells as GFM-safe plain text."""
+    text = str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\\", "&#92;")
+        .replace("|", "&#124;")
+        .replace("`", "&#96;")
+        .replace("[", "&#91;")
+        .replace("]", "&#93;")
+        .replace("!", "&#33;")
+    )
+
+
+def _cleared_rows(blast: dict[str, Any]) -> list[tuple[str, str]]:
+    raw = blast.get("cleared")
+    if not isinstance(raw, list):
+        return []
+    rows: list[tuple[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        ruled_out = str(item.get("ruled_out", "")).strip()
+        how = str(item.get("how", "")).strip()
+        if ruled_out:
+            rows.append((ruled_out, how))
+    return rows
+
+
 def _cleared(blast: dict[str, Any]) -> list[str]:
     lines = ["### Cleared", ""]
-    cleared = blast.get("cleared")
-    if isinstance(cleared, list) and cleared:
+    rows = _cleared_rows(blast)
+    if rows:
         lines.append("| Ruled out | How |")
         lines.append("|---|---|")
-        for item in cleared:
-            if isinstance(item, dict):
-                lines.append(
-                    f"| {item.get('ruled_out', '?')} | {item.get('how', '?')} |"
-                )
+        for ruled_out, how in rows:
+            lines.append(f"| {_escape_md_cell(ruled_out)} | {_escape_md_cell(how)} |")
     else:
         lines.append(
-            "Nothing was checked-and-ruled-out by this run, so nothing is listed. "
-            "(Fills with the find-stage blast-radius pass.)"
+            "Nothing was checked-and-ruled-out by this run, so nothing is listed."
         )
     lines.append("")
     return lines

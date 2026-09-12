@@ -76,6 +76,7 @@ class AVEState(TypedDict, total=False):
 
     # Match / Assess
     findings: list[Finding]
+    suppressed_findings: list[Finding]
     selected_finding: Finding | None
     selection_rationale: dict[str, Any]  # why *this* finding is the one remediated
     assessment: dict[str, Any]

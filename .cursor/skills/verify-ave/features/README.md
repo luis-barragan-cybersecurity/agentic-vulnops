@@ -43,8 +43,9 @@ Keep implementation details out of the map. Name only user paths, stable handles
 ## Features
 
 - [Route inventory](./inventory.md) covers the deterministic route scan, pre-filter screens, coverage denominator, and enforced source allowlist.
-- [LLM finder](./find.md) covers `ave find`, offline fixture replay, printed finding counts, and citation-boundary tests.
-- [Run the loop](./run-stub-loop.md) covers `ave run` / `make run`, finding attribution and head selection, per-finding lifecycles, auto-approve, and the local PR bundle.
+- [LLM finder](./find.md) covers `ave find`, both stage summaries, offline fixture replay, and finder-boundary tests.
+- [Adversarial cull](./adversarial-cull.md) covers per-finding counter-review, suppression, fail-open behavior, oracle override, and the Cleared projection.
+- [Run the loop](./run-stub-loop.md) covers `ave run` / `make run`, finding attribution and head selection, cull persistence, per-finding lifecycles, auto-approve, and the local PR bundle.
 - [Pinned-environment run](./pinned-env-run.md) covers the `AVE_PINNED_ENV` opt-in, generated-patch proof, captured exchange, pinned T1, and explicit failure outcomes.
 - [Eradicate demo](./eradicate-demo.md) covers `break` then `run` as `ave eradicate` / `make eradicate`.
 - [Scoreboard](./scoreboard.md) covers the results-table command and proves it does not edit the README.

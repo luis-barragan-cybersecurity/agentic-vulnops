@@ -14,6 +14,18 @@
       "description": "Per-candidate user prompt; {record} is the inventory record.",
       "owner": "python_authz",
       "file": "python_authz/llm_finder.candidate.md"
+    },
+    "python_authz.llm_cull.system": {
+      "version": 2,
+      "description": "System prompt for the per-finding adversarial cull (ticket 26).",
+      "owner": "python_authz",
+      "file": "python_authz/llm_cull.system.md"
+    },
+    "python_authz.llm_cull.candidate": {
+      "version": 2,
+      "description": "Per-finding cull user prompt; {case} is the redacted case.",
+      "owner": "python_authz",
+      "file": "python_authz/llm_cull.candidate.md"
     }
   }
 }

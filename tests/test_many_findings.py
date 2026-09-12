@@ -1,20 +1,9 @@
-"""Many findings in, one remediated out (ticket 24).
-
-Guards the run shape the find-stage design fixed: every finding names its source, findings
-from different sources that name the same flaw merge into one keeping both sources, a
-thin *stated* rank function picks the head and says why, and every ingested finding gets
-an honest lifecycle in the run record. The end-to-end run still ingests exactly one
-finding (the pack claims only the loop anchor, ticket 04's honesty fix), so multiplicity is
-proven here with synthetic multi-source findings; real multiplicity arrives with the LLM
-finder.
-"""
-
 from __future__ import annotations
 
 import json
 from typing import Any, cast
 
-from ave.adapters import LanguagePack, get_default_pack
+from ave.adapters import FindingBatch, LanguagePack, get_default_pack
 from ave.adapters.python_authz import catalog
 from ave.findings import (
     RANK_FUNCTION,
@@ -112,6 +101,76 @@ def test_same_location_different_kind_does_not_merge() -> None:
     assert len(merge_findings([bola, bfla], location_key=_by_location)) == 2
 
 
+def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
+    winner = _finding(
+        "high",
+        confidence=0.9,
+        source="ave:llm",
+        evidence={"rationale": "from winner"},
+    )
+    loser = _finding(
+        "low",
+        confidence=0.4,
+        source="sarif:tool",
+        evidence={
+            "rationale": "from loser",
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+            "is_loop_anchor": True,
+        },
+    )
+    merged = merge_findings([loser, winner], location_key=_by_location)
+    assert merged[0]["id"] == "high"
+    evidence = merged[0]["evidence"]
+    assert evidence["rationale"] == "from winner"
+    assert evidence["oracle"] == {
+        "path": "app/tests/x.py",
+        "test": "t",
+        "polarity": "inverted",
+    }
+    assert evidence["is_loop_anchor"] is True
+
+
+def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
+    pack = get_default_pack()
+    smuggled = _finding(
+        "other",
+        location="app/other.py:handler",
+        evidence={
+            "is_loop_anchor": True,
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+        },
+    )
+    assert pack.can_drive(smuggled) is False
+    winner = _finding(
+        "high",
+        location="app/other.py:handler",
+        confidence=0.9,
+        evidence={"rationale": "from winner"},
+    )
+    loser = _finding(
+        "low",
+        location="app/other.py:handler",
+        confidence=0.4,
+        evidence={
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+            "is_loop_anchor": True,
+        },
+    )
+    merged = merge_findings([loser, winner], location_key=_by_location)
+    assert merged[0]["evidence"]["is_loop_anchor"] is True
+    assert pack.can_drive(merged[0]) is False
+    role_at_anchor = _finding(
+        "role-anchor",
+        location=catalog.anchor_location(),
+        kind="function-role-gap",
+        evidence={
+            "is_loop_anchor": True,
+            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
+        },
+    )
+    assert pack.can_drive(role_at_anchor) is False
+
+
 def test_merge_preserves_ingest_order_and_folds_transitively() -> None:
     a = _finding("a", location="f.py:one", confidence=0.5, source="s1")
     b = _finding("b", location="f.py:two", confidence=0.5, source="s2")
@@ -129,6 +188,17 @@ def test_dedup_key_is_on_the_seam_and_the_default_pack_still_satisfies_it() -> N
     pack = get_default_pack()
     assert isinstance(pack, LanguagePack)
     assert hasattr(pack, "dedup_key")
+
+
+def test_pack_find_returns_a_batch_and_has_no_report_side_channel() -> None:
+    pack = get_default_pack()
+    assert not hasattr(pack, "last_find_report")
+    batch = pack.find("target/dvrestaurant@d32d0997")
+    assert isinstance(batch, FindingBatch)
+    assert len(batch.kept) > 1
+    assert batch.suppressed == ()
+    assert batch.report["finder"] == "llm"
+    assert batch.report["found"] == len(batch.kept)
 
 
 def test_pack_dedup_key_reads_file_and_symbol() -> None:
@@ -234,9 +304,16 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     match = next(s for s in final["spans"] if s["phase"] == "match")
     assert match["attributes"]["found"] == len(final["findings"])
     assert match["attributes"]["sources"] == ["ave:llm-finder"]
+    assert match["attributes"]["suppressed"] == 0
+    assert final.get("suppressed_findings") == []
     # Ticket 23's handoff: the find span now carries the coverage denominator.
     assert "coverage" in match["attributes"]["find_stage"]
     assert match["attributes"]["find_stage"]["coverage"]["summary"].startswith("examined ")
+    cull = match["attributes"]["find_stage"]["cull"]
+    assert cull["reviewed"] == len(final["findings"])
+    assert cull["suppressed"] == 0
+    assert cull["fail_open"] == 0
+    assert cull["client"] == "fixture"
     assess = next(s for s in final["spans"] if s["phase"] == "assess")
     assert assess["attributes"]["selection"]["rank_function"] == RANK_FUNCTION
 
@@ -267,6 +344,24 @@ def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:
         assert by_id[other].verified_at is None
         assert by_id[other].first_observed_at == by_id[driven_id].first_observed_at
     json.dumps(record.findings[0].__dict__)  # serialisable, like the persisted record
+
+
+def test_suppressed_findings_are_false_positives_triaged_at_match() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    extra = _finding("FP-1", location="app/a.py:one", source="ave:llm-finder")
+    match = next(s for s in final["spans"] if s["phase"] == "match")
+    state = cast(
+        "AVEState",
+        {**final, "suppressed_findings": [extra], "spans": final["spans"]},
+    )
+    record = build_run_record(state)
+    by_id = {lc.finding_id: lc for lc in record.findings}
+    assert by_id["FP-1"].outcome == "false_positive"
+    assert by_id["FP-1"].triaged_at == match["ended_at"]
+    assert by_id["FP-1"].verified_at is None
+    body = render_pr_body(state)
+    still_open = body[body.find("### Still open") : body.find("### Cleared")]
+    assert "`FP-1`" not in still_open
 
 
 def test_pr_body_says_which_of_many_was_selected_and_lists_the_rest_still_open() -> None:

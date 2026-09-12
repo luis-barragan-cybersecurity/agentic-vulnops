@@ -8,8 +8,9 @@ same source the finder validates it against — the fixtures cannot drift from t
 Each recording is a stand-in for a live model session, encoding the verdict a correct
 authorization review reaches from the code facts (never from the catalog answer key, which
 the finder cannot read). When live model access is available, ``AVE_LLM_LIVE=1`` with
-``AVE_LLM_RECORD`` pointed here re-records these from the wire; until then this is the
-provenance of the offline fixtures. Run: ``python -m evals.fixtures.gen_llm_finder_fixtures``.
+``AVE_LLM_RECORD`` set to the parent record root writes
+``<record-root>/llm_finder/<slug>.json``. Run:
+``python -m evals.fixtures.gen_llm_finder_fixtures``.
 """
 
 from __future__ import annotations

@@ -1,0 +1,45 @@
+{
+  "turns": [
+    [
+      {
+        "name": "get_source",
+        "arguments": {
+          "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py"
+        }
+      }
+    ],
+    [
+      {
+        "name": "submit_review",
+        "arguments": {
+          "location": "app/apis/orders/services/get_orders_for_delivery_service.py:get_orders",
+          "kind": "function-role-gap",
+          "stance": "keep",
+          "reason": "The delivery listing has no auth dependency and queries every Order",
+          "cited_spans": [
+            {
+              "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+              "start_line": 30,
+              "end_line": 30,
+              "contains": "db.query(Order)"
+            }
+          ],
+          "hypotheses": [
+            {
+              "kind": "ruled_out",
+              "claim": "Listing orders for delivery requires a staff role",
+              "cited_spans": [
+                {
+                  "file": "target/dvrestaurant/app/apis/orders/services/get_orders_for_delivery_service.py",
+                  "start_line": 12,
+                  "end_line": 36,
+                  "contains": "db.query(Order)"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  ]
+}

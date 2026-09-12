@@ -31,6 +31,7 @@ from ave.adapters.python_authz.model import (
     default_model_client,
 )
 from ave.adapters.python_authz.pack import FIXTURES_DIR
+from ave.adapters.python_authz.tools import FINDER_RETRIEVAL, execute_retrieval
 
 _ANCHOR_HANDLER = "target/dvrestaurant/app/apis/orders/services/get_order_service.py:get_order"
 
@@ -65,6 +66,15 @@ def test_every_finding_is_attributed_to_the_model() -> None:
     report = _finder().find()
     assert report.findings
     assert {str(f["source"]) for f in report.findings} == {LLM_FINDER_SOURCE}
+
+
+def test_accepted_candidates_pair_the_judged_record_with_the_minted_finding() -> None:
+    report = _finder().find()
+    assert report.accepted
+    assert report.findings == [candidate.finding for candidate in report.accepted]
+    for candidate in report.accepted:
+        assert candidate.record.symbol in str(candidate.finding["location"])
+        assert candidate.finding["source"] == LLM_FINDER_SOURCE
 
 
 # --- precision: the decoys that reach the model are cleared -------------------------------
@@ -159,6 +169,18 @@ def test_verdict_citing_an_unknown_handler_is_rejected() -> None:
         finder._accept(record, _verdict(handler_id="app/does/not/exist.py:ghost"))
 
 
+def test_verdict_for_a_different_resolvable_handler_is_rejected() -> None:
+    other_id = (
+        "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status"
+    )
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    assert store.get_handler(other_id).handler_id != record.handler_id
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(record, _verdict(handler_id=other_id))
+
+
 def test_verdict_with_no_citations_is_rejected() -> None:
     store = CodeFactsStore.build()
     finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
@@ -179,7 +201,21 @@ def test_a_cleared_verdict_yields_no_finding_but_is_not_rejected() -> None:
     store = CodeFactsStore.build()
     finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
     record = store.get_handler(_ANCHOR_HANDLER)
-    assert finder._accept(record, _verdict(is_finding=False)) is None
+    assert finder._accept(record, _verdict(is_finding=False, cited_spans=[])) is None
+
+
+def test_clear_verdict_for_a_different_resolvable_handler_is_rejected() -> None:
+    other_id = (
+        "target/dvrestaurant/app/apis/orders/services/get_order_status.py:get_order_status"
+    )
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    assert store.get_handler(other_id).handler_id != record.handler_id
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(
+            record, _verdict(is_finding=False, handler_id=other_id, cited_spans=[])
+        )
 
 
 # --- isolation: the answer key is unreachable through the tools --------------------------
@@ -187,9 +223,79 @@ def test_a_cleared_verdict_yields_no_finding_but_is_not_rejected() -> None:
 
 def test_the_answer_key_is_unreachable_through_get_source() -> None:
     store = CodeFactsStore.build()
-    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
-    result = finder._execute(ToolCall("get_source", {"file": "target/catalog.json"}))
+    result = execute_retrieval(
+        store,
+        ToolCall("get_source", {"file": "target/catalog.json"}),
+        allowed=FINDER_RETRIEVAL,
+    )
     assert "error" in result.content  # allowlist refuses it; nothing leaks to the model
+
+
+def test_missing_handler_id_is_rejected_for_finding_and_clear() -> None:
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    finding_args = {
+        "is_finding": True,
+        "kind": OWNERSHIP_GAP,
+        "confidence": 0.9,
+        "rationale": "x",
+        "cited_spans": [
+            {
+                "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                "start_line": 17,
+                "end_line": 17,
+                "contains": "Order.id == order_id",
+            }
+        ],
+    }
+    finding = Verdict.from_arguments(record.handler_id, finding_args)
+    assert finding.handler_id == ""
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(record, finding)
+    cleared = Verdict.from_arguments(
+        record.handler_id,
+        {"is_finding": False, "kind": "", "rationale": "clear", "cited_spans": []},
+    )
+    assert cleared.handler_id == ""
+    with pytest.raises(VerdictRejected, match="is not the judged"):
+        finder._accept(record, cleared)
+
+
+def test_negative_beyond_eof_and_wrong_typed_citations_cannot_validate_a_finding() -> None:
+    store = CodeFactsStore.build()
+    finder = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR))
+    record = store.get_handler(_ANCHOR_HANDLER)
+    file = "target/dvrestaurant/app/apis/orders/services/get_order_service.py"
+    line_count = len(store.get_source(file).splitlines())
+    range_cases = [
+        {"start_line": -1, "end_line": 1, "contains": "x"},
+        {"start_line": 1, "end_line": line_count + 1, "contains": "x"},
+    ]
+    for over in range_cases:
+        cite = {"file": file, **over}
+        with pytest.raises(VerdictRejected):
+            finder._accept(record, _verdict(cited_spans=[cite]))
+    typed_cases = [
+        {"start_line": True, "end_line": 17, "contains": "Order.id == order_id"},
+        {"start_line": 1.0, "end_line": 17, "contains": "Order.id == order_id"},
+        {"start_line": "17", "end_line": 17, "contains": "Order.id == order_id"},
+        None,
+        "not-a-citation",
+    ]
+    for cite in typed_cases:
+        payload: dict[str, object] = {
+            "file": file,
+            "start_line": 17,
+            "end_line": 17,
+            "contains": "Order.id == order_id",
+        }
+        with pytest.raises(VerdictRejected):
+            if isinstance(cite, dict):
+                payload.update(cite)
+                _verdict(cited_spans=[payload])
+            else:
+                _verdict(cited_spans=[cite])
 
 
 def test_citation_whitespace_is_normalized_not_column_exact() -> None:

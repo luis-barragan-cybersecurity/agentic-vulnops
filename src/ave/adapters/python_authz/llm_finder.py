@@ -1,30 +1,3 @@
-"""The LLM finder — the model-side finding source (ticket 25).
-
-This is the half of the find stage the deterministic layer (ticket 23) was built to carry:
-a model that rediscovers the ownership and role gaps a pattern scanner is blind to, reading
-only the code-facts store and never the answer key. It is **retrieve-then-reason, one
-candidate at a time** (find-stage design, decisions 3-6):
-
-* The pre-filter already dropped the handlers that cannot be a finding by arithmetic. The
-  finder iterates only ``store.candidates("examine")`` — the candidates a call can change
-  the answer for.
-* For each, a **fresh, stateless session** (`model.ModelClient.begin`) plans its own
-  retrieval through the typed tools under a **call budget**, then submits one structured
-  verdict. Context never accumulates across candidates; no session sees a previous verdict.
-  The store is the workspace, not the context window.
-* **Verdicts are validated at the submission boundary** (decision 5, from Mulder): a verdict
-  must cite the inventory record and the source line spans it claims about, and this module
-  checks that those spans resolve *and contain what is claimed* before a `Finding` is
-  produced. A verdict that fails is **rejected, not down-weighted** — an architectural
-  invariant, not a prompt instruction.
-
-Every finding this produces carries ``source = "ave:llm-finder"`` and a `location` in the
-target's own path scheme (``app/...:symbol``), so it merges and de-dups with any other
-source on the same flaw (ticket 24). The finder never drives the fix or the exploit — it is
-a finding *source*; binding a finding to a generated exploit is ticket 27, and measuring its
-blast radius is ticket 28.
-"""
-
 from __future__ import annotations
 
 import json
@@ -33,16 +6,30 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ave.adapters.python_authz.code_facts import Coverage, HandlerNotFound
+from ave.adapters.python_authz.citations import (
+    Citation,
+    CitationRejected,
+    require_identity,
+    validate_citations,
+)
+from ave.adapters.python_authz.code_facts import Coverage
 from ave.adapters.python_authz.inventory import InventoryRecord
 from ave.adapters.python_authz.model import (
     SUBMIT_VERDICT,
     ModelClient,
-    ToolCall,
     ToolResult,
+)
+from ave.adapters.python_authz.tools import (
+    FINDER_RETRIEVAL,
+    execute_retrieval,
+    retrieval_schemas,
 )
 from ave.prompts import load_prompt, prompt_version
 from ave.state import Finding
+
+#: Public name the finder tests and callers already import. The shared validator raises
+#: `CitationRejected`; this alias keeps the finder's rejection type stable.
+VerdictRejected = CitationRejected
 
 #: The finder's `source` stamp — what per-source recall counts it under (ticket 24). Never
 #: the pack anchor's name and never the answer key's: a run finding carrying this was found
@@ -70,39 +57,6 @@ _SYSTEM_PROMPT_ID = "python_authz.llm_finder.system"
 _CANDIDATE_PROMPT_ID = "python_authz.llm_finder.candidate"
 
 
-class VerdictRejected(Exception):
-    """A submitted verdict failed validation at the submission boundary. Carries the reason,
-    recorded on the report; the candidate yields no finding rather than a down-weighted one."""
-
-
-@dataclass(frozen=True)
-class Citation:
-    """One evidence reference a verdict must stand behind: a source span and the text it
-    claims is there. Validated against the store before the verdict is accepted."""
-
-    file: str
-    start_line: int
-    end_line: int
-    contains: str
-
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> Citation:
-        return Citation(
-            file=str(data["file"]),
-            start_line=int(data["start_line"]),
-            end_line=int(data["end_line"]),
-            contains=str(data.get("contains", "")),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "file": self.file,
-            "start_line": self.start_line,
-            "end_line": self.end_line,
-            "contains": self.contains,
-        }
-
-
 @dataclass(frozen=True)
 class Verdict:
     """A parsed `submit_verdict` payload, before validation. `is_finding` False is a cleared
@@ -118,14 +72,16 @@ class Verdict:
 
     @staticmethod
     def from_arguments(handler_id: str, args: dict[str, Any]) -> Verdict:
+        del handler_id
+        raw_id = args.get("handler_id")
         return Verdict(
-            handler_id=str(args.get("handler_id") or handler_id),
+            handler_id="" if raw_id is None else str(raw_id),
             is_finding=bool(args.get("is_finding")),
             kind=str(args.get("kind", "")),
             confidence=float(args.get("confidence", 0.0)),
             rationale=str(args.get("rationale", "")),
             citations=tuple(
-                Citation.from_dict(c) for c in args.get("cited_spans", [])
+                Citation.from_dict(item) for item in args.get("cited_spans") or []
             ),
         )
 
@@ -140,17 +96,23 @@ class Rejection:
 
 
 @dataclass(frozen=True)
-class FindReport:
-    """Everything one finder pass produced: the accepted findings, the candidates cleared as
-    benign, the rejected verdicts, and the coverage denominator. The pack turns `findings`
-    into the run's finding list and attaches `coverage`/`by_source` to the Match span."""
+class AcceptedCandidate:
+    record: InventoryRecord
+    finding: Finding
 
-    findings: list[Finding]
+
+@dataclass(frozen=True)
+class FindReport:
+    accepted: list[AcceptedCandidate] = field(default_factory=list)
     cleared: list[str] = field(default_factory=list)
     rejected: list[Rejection] = field(default_factory=list)
     budget_exhausted: list[str] = field(default_factory=list)
     coverage: Coverage | None = None
     prompt_versions: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def findings(self) -> list[Finding]:
+        return [candidate.finding for candidate in self.accepted]
 
     def by_source(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -178,54 +140,7 @@ class FindReport:
 # -- the tool surface exposed to the model ------------------------------------------
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "name": "get_handler",
-        "description": "The full inventory record for a handler id (file:symbol).",
-        "input_schema": {
-            "type": "object",
-            "properties": {"handler_id": {"type": "string"}},
-            "required": ["handler_id"],
-        },
-    },
-    {
-        "name": "get_source",
-        "description": (
-            "Source of an allowlisted file, comments stripped. Optional inclusive 1-based "
-            "line range."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "file": {"type": "string"},
-                "start_line": {"type": "integer"},
-                "end_line": {"type": "integer"},
-            },
-            "required": ["file"],
-        },
-    },
-    {
-        "name": "model_definition",
-        "description": "A data model's owner-column facts and source.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"name": {"type": "string"}},
-            "required": ["name"],
-        },
-    },
-    {
-        "name": "callers_of",
-        "description": "Every call site of a symbol across the allowlisted tree.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"symbol": {"type": "string"}},
-            "required": ["symbol"],
-        },
-    },
-    {
-        "name": "list_candidates",
-        "description": "The handler ids the pre-filter kept for judgement (screen=examine).",
-        "input_schema": {"type": "object", "properties": {}},
-    },
+    *retrieval_schemas(FINDER_RETRIEVAL),
     {
         "name": SUBMIT_VERDICT,
         "description": (
@@ -274,7 +189,7 @@ class LLMFinder:
     budget: int = DEFAULT_CALL_BUDGET
 
     def find(self) -> FindReport:
-        findings: list[Finding] = []
+        accepted: list[AcceptedCandidate] = []
         cleared: list[str] = []
         rejected: list[Rejection] = []
         exhausted: list[str] = []
@@ -283,6 +198,9 @@ class LLMFinder:
                 verdict = self._judge(record)
             except _BudgetExhausted:
                 exhausted.append(record.handler_id)
+                continue
+            except VerdictRejected as exc:
+                rejected.append(Rejection(record.handler_id, str(exc)))
                 continue
             if verdict is None:
                 exhausted.append(record.handler_id)
@@ -295,10 +213,10 @@ class LLMFinder:
             if finding is None:
                 cleared.append(record.handler_id)
             else:
-                findings.append(finding)
-        findings.sort(key=lambda f: str(f.get("location", "")))
+                accepted.append(AcceptedCandidate(record=record, finding=finding))
+        accepted.sort(key=lambda candidate: str(candidate.finding.get("location", "")))
         return FindReport(
-            findings=findings,
+            accepted=accepted,
             cleared=cleared,
             rejected=rejected,
             budget_exhausted=exhausted,
@@ -330,56 +248,15 @@ class LLMFinder:
             for call in calls:
                 if call.name == SUBMIT_VERDICT:
                     return Verdict.from_arguments(record.handler_id, call.arguments)
-                next_results.append(self._execute(call))
+                next_results.append(
+                    execute_retrieval(self.store, call, allowed=FINDER_RETRIEVAL)
+                )
             results = next_results
         raise _BudgetExhausted(record.handler_id)
 
-    def _execute(self, call: ToolCall) -> ToolResult:
-        """Run one retrieval tool against the store and package the result as JSON the model
-        reads next. An unknown tool or a bad argument returns an error payload rather than
-        raising — the model can recover, and a stuck session ends by budget."""
-        try:
-            content = self._dispatch(call)
-        except (HandlerNotFound, KeyError, PermissionError, ValueError) as exc:
-            content = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-        return ToolResult(call=call, content=content)
-
-    def _dispatch(self, call: ToolCall) -> str:
-        args = call.arguments
-        if call.name == "get_handler":
-            return json.dumps(self.store.get_handler(str(args["handler_id"])).to_dict())
-        if call.name == "get_source":
-            lines = _line_range(args)
-            return json.dumps(
-                {"source": self.store.get_source(str(args["file"]), lines)}
-            )
-        if call.name == "model_definition":
-            defn = self.store.model_definition(str(args["name"]))
-            return json.dumps(
-                {"facts": defn.facts.to_dict(), "source": defn.source}
-            )
-        if call.name == "callers_of":
-            sites = self.store.callers_of(str(args["symbol"]))
-            return json.dumps(
-                [
-                    {"file": s.file, "caller": s.caller_symbol, "line": s.line}
-                    for s in sites
-                ]
-            )
-        if call.name == "list_candidates":
-            return json.dumps(
-                [
-                    {"handler_id": r.handler_id, "method": r.method, "path": r.path}
-                    for r in self.store.candidates("examine")
-                ]
-            )
-        return json.dumps({"error": f"unknown tool {call.name!r}"})
-
     # -- the submission boundary ----------------------------------------------------
     def _accept(self, record: InventoryRecord, verdict: Verdict) -> Finding | None:
-        """Validate the verdict's citations against the store and, if it is a finding, mint a
-        neutral `Finding`. Rejection is total: a citation that does not resolve to what it
-        claims yields no finding, whatever the verdict's confidence."""
+        require_identity(verdict.handler_id, record.handler_id, label="cited handler")
         if not verdict.is_finding:
             return None
         self._validate(record, verdict)
@@ -407,48 +284,11 @@ class LLMFinder:
             raise VerdictRejected(
                 f"kind {verdict.kind!r} is not one of {sorted(_ALLOWED_KINDS)}"
             )
-        try:
-            self.store.get_handler(verdict.handler_id)
-        except HandlerNotFound as exc:
-            raise VerdictRejected(
-                f"cited handler {verdict.handler_id!r} does not resolve"
-            ) from exc
-        if not verdict.citations:
-            raise VerdictRejected("a finding must cite at least one source span")
-        for citation in verdict.citations:
-            self._validate_citation(citation)
-
-    def _validate_citation(self, citation: Citation) -> None:
-        if citation.end_line < citation.start_line:
-            raise VerdictRejected(
-                f"citation span {citation.start_line}-{citation.end_line} is inverted"
-            )
-        try:
-            source = self.store.get_source(
-                citation.file, (citation.start_line, citation.end_line)
-            )
-        except (PermissionError, FileNotFoundError, OSError) as exc:
-            raise VerdictRejected(
-                f"cited file {citation.file!r} is not readable: {exc}"
-            ) from exc
-        needle = _normalize(citation.contains)
-        if not needle:
-            raise VerdictRejected("a citation must claim text (contains) to check")
-        if needle not in _normalize(source):
-            raise VerdictRejected(
-                f"cited text {citation.contains!r} not found in "
-                f"{citation.file}:{citation.start_line}-{citation.end_line}"
-            )
+        validate_citations(self.store, verdict.citations)
 
 
 class _BudgetExhausted(Exception):
     """A session spent its whole call budget without submitting a verdict."""
-
-
-def _line_range(args: dict[str, Any]) -> tuple[int, int] | None:
-    if "start_line" in args and "end_line" in args:
-        return (int(args["start_line"]), int(args["end_line"]))
-    return None
 
 
 def _location(record: InventoryRecord) -> str:
@@ -470,9 +310,3 @@ def _finding_id(record: InventoryRecord) -> str:
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
-
-
-def _normalize(text: str) -> str:
-    """Collapse whitespace so a citation's `contains` need not reproduce indentation exactly
-    — the claim is about *what* the line says, not its column."""
-    return " ".join(text.split())

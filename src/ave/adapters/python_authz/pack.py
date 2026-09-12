@@ -1,40 +1,29 @@
-"""`python_authz` — v1's language pack: Python + FastAPI, BOLA/BFLA.
-
-The first concrete `LanguagePack`. Ticket 03 (walking skeleton) drove it against one
-synthetic instance; ticket 04 repointed it at the real vendored target
-(`target/catalog.json`, 8 authorization instances + decoys, each bound to a by-path
-exploit oracle, inverted polarity). The four seam methods are what stay stable across that
-swap and across a future second-language pack (D3).
-
-The finding source is now the LLM finder (ticket 25): `find()` runs it over the code-facts
-store and returns the ownership and role gaps it rediscovers, each `ave:llm-finder` and
-citation-validated, offline by default (recorded fixtures). The finding at the loop anchor
-location I-04 (the `get_order` object-ownership gap) is bound to the pack's hermetic exploit
-oracle — modelled in-process by `_skeleton_target`, so `make check` runs without standing up
-the target's environment — so one finding per run is driven to a test-verified fix. Every
-other finding is real and reported but not yet drivable (`can_drive()` is False there); a
-generated exploit binds each in ticket 27, and the other by-path oracles run in the target's
-pinned env. The four seam methods stay stable across that deepening and a second pack (D3).
-"""
-
 from __future__ import annotations
 
 import difflib
 from pathlib import Path
 from typing import Any, cast
 
-from ave.adapters.base import PinnedExploitResult, PreparedFix
+from ave.adapters.base import FindingBatch, PinnedExploitResult, PreparedFix
 from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
 from ave.adapters.python_authz.code_facts import CodeFactsStore
-from ave.adapters.python_authz.llm_finder import FindReport, LLMFinder
+from ave.adapters.python_authz.cull import (
+    cull_attributes,
+    pair_reviews,
+    review_accepted,
+)
+from ave.adapters.python_authz.llm_finder import (
+    OWNERSHIP_GAP,
+    AcceptedCandidate,
+    LLMFinder,
+)
 from ave.adapters.python_authz.model import default_model_client
 from ave.state import Finding
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-#: The LLM finder's recorded transcripts — replayed offline so `find()` (and `make check`)
-#: need no model access; the live model is reached only on `AVE_LLM_LIVE` (see `model`).
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_finder"
+CULL_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_cull"
 _GET_ORDER = (
     _REPO_ROOT
     / "target"
@@ -74,6 +63,56 @@ def get_order(
 """
 
 
+def _is_anchor_identity(finding: Finding) -> bool:
+    return (
+        finding.get("location") == catalog.anchor_location()
+        and finding.get("kind") == OWNERSHIP_GAP
+    )
+
+
+def _bind_anchor(original: Finding) -> Finding:
+    finding = cast("Finding", dict(original))
+    if not _is_anchor_identity(finding):
+        return finding
+    raw = finding.get("evidence", {})
+    evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+    evidence["oracle"] = catalog.anchor_oracle()
+    evidence["is_loop_anchor"] = True
+    finding["evidence"] = evidence
+    return finding
+
+
+def _cleared_how(reason: str, hypothesis: dict[str, Any]) -> str:
+    citations = hypothesis.get("citations") or []
+    first = citations[0] if citations and isinstance(citations[0], dict) else {}
+    file = first.get("file", "?")
+    start = first.get("start_line", "?")
+    end = first.get("end_line", start)
+    span = f"{file}:{start}" if start == end else f"{file}:{start}-{end}"
+    contains = first.get("contains", "")
+    cite = f"{span} — {contains}" if contains else span
+    if reason:
+        return f"{reason} ({cite})"
+    return cite
+
+
+def _cleared_rows(finding: Finding) -> list[dict[str, str]]:
+    evidence = finding.get("evidence")
+    review = evidence.get("counter_review") if isinstance(evidence, dict) else None
+    if not isinstance(review, dict) or review.get("basis") != "validated":
+        return []
+    reason = str(review.get("reason", "")).strip()
+    rows: list[dict[str, str]] = []
+    for hypothesis in review.get("hypotheses") or []:
+        if not isinstance(hypothesis, dict) or hypothesis.get("kind") != "ruled_out":
+            continue
+        claim = str(hypothesis.get("claim", "")).strip()
+        if not claim:
+            continue
+        rows.append({"ruled_out": claim, "how": _cleared_how(reason, hypothesis)})
+    return rows
+
+
 def _no_oracle(finding: Finding) -> NotImplementedError:
     return NotImplementedError(
         f"{finding.get('id')} is not at the loop anchor location {catalog.anchor_location()}. "
@@ -82,51 +121,23 @@ def _no_oracle(finding: Finding) -> NotImplementedError:
 
 
 class PythonAuthzPack:
-    """Python/FastAPI authorization pack. v1 scope: the vendored DVRestaurant catalog.
-
-    The LLM finder (ticket 25) reasons over the code-facts store and rediscovers the
-    ownership and role gaps a pattern scanner is blind to; `find()` returns its findings.
-    The finding that lands at the anchor location (I-04, `get_order`) is bound to the pack's
-    hermetic exploit oracle so the end-to-end loop still drives one finding to a
-    test-verified fix. Every other finding is real and reported, but not yet drivable — a
-    generated exploit binds it in ticket 27 — so `can_drive()` is True only at the anchor
-    location for now, and the seam widens there."""
-
     name = "python_authz"
 
-    def __init__(self) -> None:
-        #: The most recent `find()` report — the coverage denominator and per-source counts
-        #: the Match phase attaches to the run's find span (ticket 23's handoff to 25).
-        self._last_report: FindReport | None = None
-
-    def find(self, target_ref: str) -> list[Finding]:
-        """Run the model finder over the code-facts store's `examine` candidates and return
-        its validated findings (`ave:llm-finder`). Offline by default — the finder replays
-        recorded transcripts, so this needs no model access — and citation-validated at the
-        submission boundary, so nothing here is a down-weighted guess. The finding at the
-        anchor location is enriched with the loop's hermetic oracle so it stays drivable;
-        the finder never reads that binding (or the answer key) to detect it."""
+    def find(self, target_ref: str) -> FindingBatch:
+        del target_ref
         store = CodeFactsStore.build()
-        finder = LLMFinder(store, default_model_client(FIXTURES_DIR))
-        report = finder.find()
-        self._last_report = report
-        anchor_location = catalog.anchor_location()
-        findings: list[Finding] = []
-        for original in report.findings:
-            finding = cast("Finding", dict(original))
-            if finding.get("location") == anchor_location:
-                raw = finding.get("evidence", {})
-                evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
-                evidence["oracle"] = catalog.anchor_oracle()
-                evidence["is_loop_anchor"] = True
-                finding["evidence"] = evidence
-            findings.append(finding)
-        return findings
-
-    def last_find_report(self) -> FindReport | None:
-        """The find-stage report from the last `find()`, for the Match span. Duck-typed
-        capability (see `phases.match`); returns None before any `find()`."""
-        return self._last_report
+        finder_client = default_model_client(FIXTURES_DIR)
+        cull_client = default_model_client(CULL_FIXTURES_DIR)
+        report = LLMFinder(store, finder_client).find()
+        accepted = [
+            AcceptedCandidate(record=candidate.record, finding=_bind_anchor(candidate.finding))
+            for candidate in report.accepted
+        ]
+        reviews = review_accepted(store, accepted, cull_client)
+        kept, suppressed = pair_reviews(accepted, reviews)
+        attrs = report.to_attributes()
+        attrs["cull"] = cull_attributes(reviews, client_mode=cull_client.name)
+        return FindingBatch(kept=kept, suppressed=suppressed, report=attrs)
 
     def dedup_key(self, finding: Finding) -> str:
         """`file:symbol` as this pack reports locations. A trailing numeric component is
@@ -140,11 +151,15 @@ class PythonAuthzPack:
         return f"{file}:{tail}"
 
     def can_drive(self, finding: Finding) -> bool:
-        """Whether this pack can drive `finding` to a test-verified fix now: True only for
-        the finding bound to the loop's hermetic oracle (the anchor location). Ticket 27's
-        generated exploits widen this to any finding whose exploit flips."""
+        """True only for the current hard-coded anchor identity plus oracle evidence.
+        A function-role-gap at the anchor location is not drivable."""
+        if not _is_anchor_identity(finding):
+            return False
         evidence = finding.get("evidence", {})
-        return bool(isinstance(evidence, dict) and evidence.get("is_loop_anchor"))
+        if not isinstance(evidence, dict) or not evidence.get("is_loop_anchor"):
+            return False
+        oracle = evidence.get("oracle")
+        return isinstance(oracle, dict) and bool(oracle.get("path"))
 
     def _is_anchor(self, finding: Finding) -> bool:
         return self.can_drive(finding)
@@ -164,7 +179,7 @@ class PythonAuthzPack:
             "files": None,
             "dependents": None,
             "routes": None,
-            "cleared": [],
+            "cleared": _cleared_rows(finding),
             "before_you_merge": [
                 {
                     "command": f"cd target/dvrestaurant && poetry run pytest {oracle_ref}",
