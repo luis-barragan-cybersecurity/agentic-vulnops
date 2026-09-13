@@ -61,7 +61,7 @@ Runnable by the reviewer, and allowed to fail:
 
 ```bash
 # expect: FAILS after this fix (inverted polarity — this test IS the attack)
-poetry run pytest results/runs/a94ff4299ccd433a85be78178949d6f1/bound/_ave_bound.py::test_authorization_boundary
+cp results/runs/a94ff4299ccd433a85be78178949d6f1/bound/_ave_bound.py target/dvrestaurant/app/tests/_ave_bound.py && cd target/dvrestaurant && poetry run pytest app/tests/_ave_bound.py::test_authorization_boundary
 ```
 ```bash
 # expect: green — the target's own suite (the T2 rung; the ladder above is honest about not having run it)

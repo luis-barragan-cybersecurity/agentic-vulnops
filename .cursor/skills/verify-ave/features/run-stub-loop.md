@@ -14,7 +14,7 @@ By default, `ave run` walks the seven-phase graph on the hardcoded target ref `t
 - `run-cleared` fills the PR body's Cleared table from the selected finding's validated ruled-out hypothesis.
 - `run-many-contract` covers multi-source attribution, de-duplication, ranking, and unselected open findings.
 - `run-pr-body` writes the locked, honest PR-body template and matches the committed example after run-specific values are normalized.
-- `run-bound-exploit` writes `results/runs/<id>/bound/_ave_bound.py` after HITL and names that node in Before you merge.
+- `run-bound-exploit` writes `results/runs/<id>/bound/_ave_bound.py` after HITL. Before you merge copies that file to `app/tests/_ave_bound.py` and runs it from `target/dvrestaurant`.
 
 ## How to get to it (user POV)
 
@@ -41,9 +41,9 @@ Preconditions:
 - **Ingestion.** Match merges kept findings into `findings`. Suppressed findings go only to `suppressed_findings`, so Assess cannot rank or drive them.
 - **Lifecycles.** The default run record has eight lifecycles, all `outcome: "open"`. Only `ave-llm-get_order_service-get_order` has `triaged_at` set. The rest have `triaged_at: null` and `verified_at: null`.
 - **Bound exploit.** The run directory contains `bound/_ave_bound.py`. That file defines `test_authorization_boundary`, consults `AVE_CAPTURE_PATH`, and does not mention `app/tests/vulns/`.
-- **PR body.** Open the printed `pr_body` path. Before the attack exchange, it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, and quotes the rank function. The Cleared table rules out `A post-fetch ownership guard binds db_order to current_user on every path`. Its How cell explains that the handler returns `db_order` with no `user_id` comparison and cites `get_order_service.py:11-20`. Every ladder rung including T1 is `⬜ not green`. `Ready to merge` is `no`. Before you merge names `results/runs/<id>/bound/_ave_bound.py::test_authorization_boundary`.
+- **PR body.** Open the printed `pr_body` path. Before the attack exchange, it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, and quotes the rank function. The Cleared table rules out `A post-fetch ownership guard binds db_order to current_user on every path`. Its How cell explains that the handler returns `db_order` with no `user_id` comparison and cites `get_order_service.py:11-20`. Every ladder rung including T1 is `⬜ not green`. `Ready to merge` is `no`. Before you merge copies `results/runs/<id>/bound/_ave_bound.py` to `target/dvrestaurant/app/tests/_ave_bound.py` and runs that node from `target/dvrestaurant`.
 - **PR-body contract.** Run `.cursor/skills/verify-ave/control-ave capture pr-body-template -- pytest -- tests/test_pr_body.py -q`. Exit code `0`; stdout reports `24 passed`. This proves the fresh renderer matches `results/example-run/pr/PR_BODY.md` after only run IDs and timestamps are normalized. It also proves that Cleared is pack-projected and that its model-authored table cells are escaped.
-- **Binding contract.** Run `.cursor/skills/verify-ave/control-ave capture binding-contract -- pytest -- tests/test_binding.py -q`. Exit code `0`; stdout reports `10 passed`.
+- **Binding contract.** Run `.cursor/skills/verify-ave/control-ave capture binding-contract -- pytest -- tests/test_binding.py -q`. Exit code `0`; stdout reports `11 passed`.
 - **Many-findings contract.** Run `.cursor/skills/verify-ave/control-ave capture many-findings -- pytest -- tests/test_many_findings.py -q`. Exit code `0`; stdout reports `26 passed`. These tests fold a second source, check one lifecycle per ingested finding, and prove the suppressed false-positive lifecycle. The default fixture run does not prove suppression.
 - **Cull contract.** Run `.cursor/skills/verify-ave/control-ave capture cull-tests -- pytest -- tests/test_cull.py -q`. Exit code `0`; stdout reports `29 passed`. Scripted sessions prove suppression, fail-open keep, one-to-one pairing, and bound-oracle override.
 - **Make entry.** Run `.cursor/skills/verify-ave/control-ave make -- run`. Same four summary lines and exit `0`.
