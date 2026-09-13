@@ -1,6 +1,6 @@
 # Pinned-environment run
 
-`AVE_PINNED_ENV=1 ave run` asks the Python authorization pack to prove AVE's generated I-04 patch in `target/dvrestaurant`'s Poetry environment. A successful `200` to `404` or `403` flip supplies T1 and renders the exchange in the local PR body. A failed, unavailable, or non-flipping requested run leaves T1 red.
+`AVE_PINNED_ENV=1 ave run` asks the Python authorization pack to prove AVE's generated I-04 patch in `target/dvrestaurant`'s Poetry environment. Prepare has already written `results/runs/<id>/bound/_ave_bound.py`. The runner copies that file into an isolated tree at `app/tests/_ave_bound.py` and runs it before and after the patch. A successful `200` to `404` or `403` flip supplies T1 and renders the exchange in the local PR body. A failed, unavailable, or non-flipping requested run leaves T1 red.
 
 ## Sub-features
 
@@ -24,7 +24,7 @@ Preconditions:
 - `control-ave doctor` succeeded for AVE's own `.venv`.
 - `target/dvrestaurant/` exists.
 - `poetry` is on the `PATH`.
-- From `target/dvrestaurant/`, `poetry run python --version` succeeds and `poetry run pytest app/tests/vulns/_ave_capture_bola_order_read.py -q` can import the target.
+- From `target/dvrestaurant/`, `poetry run python --version` succeeds and `poetry run pytest app/tests/conftest.py -q` can import the target. The generated exploit is not the catalog file under `app/tests/vulns/`.
 
 - **Pinned CLI entry.** Run `AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run -- cli -- run`. Exit code `0`. `artifacts/pinned-env-run/command.txt` includes the opt-in.
 - **Outcome.** Stdout contains the normal four run summary fields. The command still reports `ready_to_merge = False` because only T1 is green.
@@ -36,7 +36,7 @@ Preconditions:
 
 ## Gotchas
 
-- The command starts no server. On success, it runs the same short-lived capture test against the original target and an isolated patched copy, then returns.
+- The command starts no server. On success, it copies the generated bound file into an isolated tree and runs that node before and after the patch, then returns. The tracked target is not the before-run cwd.
 - The presence of `target/dvrestaurant/` and `poetry` does not prove that the target environment can run. Confirm the Python version and imports before treating the path as reachable.
 - A requested pinned failure never falls back to the hermetic T1. Read the run record or generated PR body for the failure status because the CLI summary does not print it.
 - A successful proof leaves `git status --porcelain -- target` unchanged apart from changes that were present before the command.
