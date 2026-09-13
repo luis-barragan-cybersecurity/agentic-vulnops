@@ -309,14 +309,14 @@ def _ladder(
         green = bool(ladder.get(key))
         status = "✅" if green else "⬜ not green"
         evidence = "—"
-        if key == "t1_exploit_oracle_flipped" and green and oracle:
-            if pinned is not None and pinned.get("status") == "success":
-                evidence = f"`{oracle}` flipped after the generated patch"
-            else:
-                evidence = (
-                    "hermetic in-process model flipped; generated patch was not "
-                    "executed by this run"
-                )
+        if (
+            key == "t1_exploit_oracle_flipped"
+            and green
+            and oracle
+            and pinned is not None
+            and pinned.get("status") == "success"
+        ):
+            evidence = f"`{oracle}` flipped after the generated patch"
         lines.append(f"| {label} | {status} | {evidence} |")
     lines.append("")
     lines.append(

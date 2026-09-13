@@ -27,7 +27,7 @@ Preconditions:
 - **CLI entry.** Run `.cursor/skills/verify-ave/control-ave capture inventory -- cli -- inventory`. Exit code `0`.
 - **Coverage.** The first line is `inventory: examined 18 of 27 handlers.` The next line reports `examine 15, cheap 3, dropped 9`.
 - **Handlers.** Stdout has 27 handler lines. The anchor includes `examine`, `GET`, `/orders/{order_id}`, and `get_order`.
-- **Contract tests.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tests -- pytest -- tests/test_code_facts.py -q`. Exit code `0`; stdout reports `21 passed`. These tests cover the scan and query contracts.
+- **Contract tests.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tests -- pytest -- tests/test_code_facts.py -q`. Exit code `0`; stdout reports `22 passed`. These tests cover the scan and query contracts, including the writer allowlist.
 - **No write.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tracked-clean -- git diff --exit-code -- README.md target`. Exit code `0`.
 - **Proof.** Keep `artifacts/inventory/`, `artifacts/inventory-tests/`, and `artifacts/inventory-tracked-clean/`.
 

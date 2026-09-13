@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, cast
 
@@ -133,14 +133,6 @@ class CounterReview:
         }
 
 
-def has_bound_oracle(finding: Finding) -> bool:
-    evidence = finding.get("evidence")
-    if not isinstance(evidence, dict):
-        return False
-    oracle = evidence.get("oracle")
-    return isinstance(oracle, dict) and bool(oracle.get("path"))
-
-
 def fail_open(
     finding: Finding,
     *,
@@ -174,8 +166,9 @@ def resolve_submitted(
     location_key: str,
     prompt_versions: dict[str, int],
     client_mode: str,
+    protected: bool = False,
 ) -> CounterReview:
-    if submitted.stance == "suppress" and has_bound_oracle(finding):
+    if submitted.stance == "suppress" and protected:
         effective: Disposition = "keep"
         basis: ReviewBasis = "bound_oracle"
     else:
@@ -331,6 +324,7 @@ def review_accepted(
     client: ModelClient,
     *,
     budget: int = DEFAULT_CALL_BUDGET,
+    protect: Callable[[Finding], bool] | None = None,
 ) -> list[CounterReview]:
     try:
         versions = prompt_versions()
@@ -355,6 +349,7 @@ def review_accepted(
             client,
             budget=budget,
             prompt_versions=versions,
+            protect=protect,
         )
         for candidate in accepted
     ]
@@ -367,6 +362,7 @@ def review_one(
     *,
     budget: int,
     prompt_versions: dict[str, int],
+    protect: Callable[[Finding], bool] | None = None,
 ) -> CounterReview:
     finding = candidate.finding
     key = location_key(finding)
@@ -415,7 +411,13 @@ def review_one(
                     **meta,
                 )
             if len(terminals) == 1:
-                return _accept_review(store, candidate, terminals[0].arguments, **meta)
+                return _accept_review(
+                    store,
+                    candidate,
+                    terminals[0].arguments,
+                    protect=protect,
+                    **meta,
+                )
             next_results = [
                 execute_retrieval(store, call, allowed=CULL_RETRIEVAL) for call in calls
             ]
@@ -467,6 +469,7 @@ def _accept_review(
     location_key: str,
     prompt_versions: dict[str, int],
     client_mode: str,
+    protect: Callable[[Finding], bool] | None = None,
 ) -> CounterReview:
     try:
         submitted = _parse_submitted(store, candidate, args)
@@ -485,6 +488,7 @@ def _accept_review(
         location_key=location_key,
         prompt_versions=prompt_versions,
         client_mode=client_mode,
+        protected=bool(protect is not None and protect(candidate.finding)),
     )
 
 

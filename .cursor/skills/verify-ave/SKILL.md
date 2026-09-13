@@ -5,7 +5,7 @@ description: Drive AVE from the CLI and Makefile. Use when proving ave/make run,
 
 # Verify AVE
 
-AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` replays finder and adversarial-cull fixtures, drives the I-04 location through the in-process oracle, and writes a local PR bundle under `results/runs/<id>/`. `ave find` prints both fixture stages without walking the graph. `AVE_PINNED_ENV=1` runs the I-04 capture test against the vendored target and an isolated copy with AVE's generated patch applied, both through the target's Poetry interpreter. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
+AVE is a CLI. There is no web UI and no long-running server. A user runs Makefile verbs that call `python -m ave.cli`. The FastAPI fork is vendored under `target/dvrestaurant/` with a catalog at `target/catalog.json`. By default, `ave run` replays finder and adversarial-cull fixtures, drives the I-04 location, writes `results/runs/<id>/bound/_ave_bound.py` after the HITL gate, and writes a local PR bundle under that same run directory. Default T1 stays unpainted. `ave find` prints both fixture stages without walking the graph. `AVE_PINNED_ENV=1` copies that generated file into an isolated target tree and runs it before and after AVE's patch, through the target's Poetry interpreter. Neither path starts the target's Docker app or a long-running server. Prove what the command actually does, not what the README opening promises.
 
 The next agent to read this has never seen the app. Commands below are literal.
 
@@ -58,6 +58,7 @@ Put `.cursor/skills/verify-ave` on `PATH` or invoke the script by path. Always g
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_code_facts.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_llm_finder.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_cull.py
+.cursor/skills/verify-ave/control-ave pytest -- tests/test_binding.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_retrieval_tools.py
 AVE_PINNED_ENV=1 .cursor/skills/verify-ave/control-ave capture pinned-env-run -- cli -- run
 ```
@@ -69,7 +70,8 @@ Stable handles:
 - CLI subcommand names: `run`, `break`, `eradicate`, `scoreboard`, `inventory`, `find`
 - Inventory summary `inventory: examined 18 of 27 handlers.`
 - Inventory screen counts `examine 15, cheap 3, dropped 9`
-- Inventory contract node `tests/test_code_facts.py` (21 tests)
+- Inventory contract node `tests/test_code_facts.py` (22 tests)
+- Binding contract node `tests/test_binding.py` (11 tests)
 - Find summary `find: examined 18 of 27 handlers.`
 - Finder summary `finder: 8 accepted, 7 finder-cleared, 0 rejected, 0 exhausted`
 - Cull summary `adversarial-cull: 8 reviewed, 8 kept, 0 suppressed, 0 fail-open`
@@ -109,9 +111,9 @@ Proof standards:
 - Capture the command, stdout, stderr, and exit code. For `run` and `eradicate`, the four summary lines are the user-visible result. The OTel JSON blob is a side effect of tracing, not the product.
 - `inventory` parses the allowlisted target application as text, prints one screen per route handler, and writes no code-facts file. Confirm the summary, the 27 handler lines, and a clean `README.md` / `target/`.
 - Check side effects, not slogans. `break` prints that the catalog is already seeded and writes nothing under `target/`. `scoreboard` prints a ticket-05 stub and does not edit the README. `run` / `eradicate` write gitignored files under `results/runs/<id>/`. Confirm `git -C <repo> status --porcelain -- README.md target` stays empty.
-- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, quotes the rank function, keeps only T1 green, and reports readiness `no`. Its Cleared table contains one ruled-out ownership-guard hypothesis and explains the missing `user_id` comparison with a source citation. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison.
+- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, quotes the rank function, leaves every ladder rung including T1 unpainted, and reports readiness `no`. Before you merge copies `results/runs/<id>/bound/_ave_bound.py` to `target/dvrestaurant/app/tests/_ave_bound.py`, then runs that node from `target/dvrestaurant`, plus `poetry run pytest app/tests`. Its Cleared table contains one ruled-out ownership-guard hypothesis and explains the missing `user_id` comparison with a source citation. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison. Confirm the bound file exists next to the run record.
 - The default pack emits eight kept findings from fixture replay. Inspect the run record for Match `found: 8`, `ingested: 8`, `suppressed: 0`, and `sources: ["ave:llm-finder"]`. Under `find_stage.cull`, verify `reviewed: 8`, `kept: 8`, `suppressed: 0`, `fail_open: 0`, and `bound_oracle_overrides: 0`. Assess drives `ave-llm-get_order_service-get_order` and records the other seven as deferred. All eight default lifecycles stay `open`. Only the driven finding has `triaged_at` set. Use `tests/test_many_findings.py` for the suppressed false-positive lifecycle, `tests/test_cull.py` for suppression and fail-open behavior, and `tests/test_llm_finder.py` for fixture recall. Do not report these results as a live-model run.
-- An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE ran the same capture test against the original target and an isolated copy after applying the generated patch. The tracked target remains unchanged.
+- An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE copied `bound/_ave_bound.py` into an isolated tree at `app/tests/_ave_bound.py` and ran that node before and after the generated patch. The tracked target remains unchanged.
 - A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `not_flipped`, `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.
 - `make baseline` is a separate pattern-scanner comparator. It may run live Semgrep and refresh `semgrep-findings.json`, or replay that committed file when Semgrep is unavailable; both paths rewrite `results.json`. `control-ave` keeps Semgrep's log and settings under this skill's ignored artifacts directory so a sandboxed drive does not need write access to `~/.semgrep`. Record the source line and pre-drive status of `evals/baseline/semgrep/`.
 - `python -m ave.invariant --check` still prints the vacuous OK even after live runs have written records. Record the exact stdout. Do not report it as "the invariant held over run records."

@@ -28,6 +28,7 @@ import pytest
 from ave.adapters.python_authz.allowlist import (
     AllowlistViolation,
     finder_allowlist,
+    writer_allowlist,
 )
 from ave.adapters.python_authz.code_facts import (
     CodeFactsStore,
@@ -62,6 +63,18 @@ def test_finder_allowlist_permits_app_source_only() -> None:
         "target/dvrestaurant/app/tests/vulns/ave_seed_bola_order_read.py"
     )
     assert not allow.is_readable("target/dvrestaurant/app/tests/conftest.py")
+
+
+def test_writer_allowlist_permits_app_tests_minus_vulns() -> None:
+    allow = writer_allowlist()
+    assert allow.is_readable("target/dvrestaurant/app/tests/conftest.py")
+    assert not allow.is_readable(
+        "target/dvrestaurant/app/tests/vulns/ave_seed_bola_order_read.py"
+    )
+    assert not allow.is_readable("target/catalog.json")
+    assert not allow.is_readable(
+        "target/dvrestaurant/app/apis/orders/services/get_order_service.py"
+    )
 
 
 def test_finder_allowlist_boundary_matches_the_de_leak_guard() -> None:

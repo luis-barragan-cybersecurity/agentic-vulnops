@@ -8,7 +8,7 @@
 - `cull-isolation` opens one fresh session per accepted finding and withholds oracle, catalog, confidence, other candidates, and previous verdicts.
 - `cull-boundary` validates finding identity, stance, hypotheses, and source citations before a review can suppress.
 - `cull-fail-open` keeps findings when a review is missing, exhausted, malformed, unavailable, or interrupted by a session error.
-- `cull-oracle` records a submitted suppress but keeps the bound I-04 finding.
+- `cull-oracle` records a submitted suppress but keeps a finishable finding (`pack.can_drive`). That is get_order plus an object-ownership gap plus a handler route, not a catalog oracle path.
 - `cull-pairing` pairs candidates and reviews one-to-one without collapsing duplicate identities.
 - `cull-lifecycle` stores suppressed findings as false positives triaged at Match completion.
 - `cull-cleared` projects validated ruled-out hypotheses into GFM-safe PR table rows.

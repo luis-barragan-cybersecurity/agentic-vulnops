@@ -1,12 +1,12 @@
 {
-  "run_id": "e2c2507df36b40adb471e5810eb7076c",
+  "run_id": "a94ff4299ccd433a85be78178949d6f1",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-09T02:56:17.029539+00:00",
-      "ended_at": "2026-09-09T02:56:17.040184+00:00",
+      "started_at": "2026-09-13T05:05:13.600697+00:00",
+      "ended_at": "2026-09-13T05:05:13.615312+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,8 +14,8 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-09T02:56:17.041132+00:00",
-      "ended_at": "2026-09-09T02:56:17.152019+00:00",
+      "started_at": "2026-09-13T05:05:13.616178+00:00",
+      "ended_at": "2026-09-13T05:05:13.786703+00:00",
       "attributes": {
         "found": 8,
         "ingested": 8,
@@ -554,8 +554,8 @@
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-09T02:56:17.155870+00:00",
-      "ended_at": "2026-09-09T02:56:17.155936+00:00",
+      "started_at": "2026-09-13T05:05:13.787526+00:00",
+      "ended_at": "2026-09-13T05:05:13.787589+00:00",
       "attributes": {
         "selected": true,
         "selection": {
@@ -654,8 +654,8 @@
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-09T02:56:17.159384+00:00",
-      "ended_at": "2026-09-09T02:56:17.163600+00:00",
+      "started_at": "2026-09-13T05:05:13.788490+00:00",
+      "ended_at": "2026-09-13T05:05:13.792620+00:00",
       "attributes": {
         "route": "hitl_approved",
         "hitl_route": "unknown_blast_radius",
@@ -664,24 +664,24 @@
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-09T02:56:17.166511+00:00",
-      "ended_at": "2026-09-09T02:56:17.166661+00:00",
+      "started_at": "2026-09-13T05:05:13.795391+00:00",
+      "ended_at": "2026-09-13T05:05:13.799170+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-09T02:56:17.167874+00:00",
-      "ended_at": "2026-09-09T02:56:17.167880+00:00",
+      "started_at": "2026-09-13T05:05:13.801042+00:00",
+      "ended_at": "2026-09-13T05:05:13.801051+00:00",
       "attributes": {
-        "pr_ref": "local:pr/e2c2507df36b40adb471e5810eb7076c"
+        "pr_ref": "local:pr/a94ff4299ccd433a85be78178949d6f1"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-09T02:56:17.169320+00:00",
-      "ended_at": "2026-09-09T02:56:17.169341+00:00",
+      "started_at": "2026-09-13T05:05:13.802340+00:00",
+      "ended_at": "2026-09-13T05:05:13.802349+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -691,7 +691,7 @@
   "findings": [
     {
       "finding_id": "ave-llm-update_profile_service-update_profile",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -699,7 +699,7 @@
     },
     {
       "finding_id": "ave-llm-delete_menu_item_service-delete_menu_item",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -707,7 +707,7 @@
     },
     {
       "finding_id": "ave-llm-update_menu_item_service-update_menu_item",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -715,15 +715,15 @@
     },
     {
       "finding_id": "ave-llm-get_order_service-get_order",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
-      "triaged_at": "2026-09-09T02:56:17.159384+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "triaged_at": "2026-09-13T05:05:13.788490+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
     },
     {
       "finding_id": "ave-llm-get_orders_for_delivery_service-get_orders",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -731,7 +731,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_discount_coupons",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -739,7 +739,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_referral_code_endpoint",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -747,7 +747,7 @@
     },
     {
       "finding_id": "ave-llm-update_user_role_service-update_user_role",
-      "first_observed_at": "2026-09-09T02:56:17.029539+00:00",
+      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
