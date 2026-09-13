@@ -132,10 +132,12 @@ def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
 
 def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
     pack = get_default_pack()
+    route = {"method": "GET", "path": "/orders/{order_id}"}
     smuggled = _finding(
         "other",
         location="app/other.py:handler",
         evidence={
+            "handler": route,
             "is_loop_anchor": True,
             "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
         },
@@ -163,12 +165,21 @@ def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
         "role-anchor",
         location=catalog.anchor_location(),
         kind="function-role-gap",
-        evidence={
-            "is_loop_anchor": True,
-            "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
-        },
+        evidence={"handler": route},
     )
     assert pack.can_drive(role_at_anchor) is False
+    missing_route = _finding(
+        "no-route",
+        location=catalog.anchor_location(),
+        evidence={},
+    )
+    assert pack.can_drive(missing_route) is False
+    finishable = _finding(
+        "anchor",
+        location=catalog.anchor_location(),
+        evidence={"handler": route},
+    )
+    assert pack.can_drive(finishable) is True
 
 
 def test_merge_preserves_ingest_order_and_folds_transitively() -> None:
@@ -294,7 +305,10 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     assert len(final["findings"]) > 1
     assert {f["source"] for f in final["findings"]} == {"ave:llm-finder"}
     driven = final["selected_finding"]
-    assert driven is not None and driven["evidence"]["is_loop_anchor"] is True
+    pack = get_default_pack()
+    assert driven is not None and pack.can_drive(driven) is True
+    assert driven["evidence"]["oracle"]["test"] == "test_authorization_boundary"
+    assert driven["evidence"]["oracle"]["path"].endswith("bound/_ave_bound.py")
     rationale = final["selection_rationale"]
     assert rationale["candidates"] == len(final["findings"])
     assert rationale["selected"] == driven["id"]

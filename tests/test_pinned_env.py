@@ -10,12 +10,13 @@ import pytest
 from ave import cli
 from ave.adapters import get_default_pack
 from ave.adapters.base import PinnedEnvCapable
-from ave.adapters.python_authz import _pinned_env, catalog
+from ave.adapters.python_authz import _pinned_env
+from ave.adapters.python_authz._binding import TEST_NAME
 from ave.adapters.python_authz.pack import _GET_ORDER, _PATCH_REL
 from ave.policy import policy_version
 from ave.pr import _safe_attack_exchange, render_pr_body
 from ave.runner import run_once
-from ave.state import AVEState, Finding
+from ave.state import AVEState
 
 _INITIAL: AVEState = {
     "target_ref": "target/dvrestaurant@d32d0997",
@@ -64,23 +65,32 @@ def test_pack_advertises_pinned_capability() -> None:
     assert isinstance(get_default_pack(), PinnedEnvCapable)
 
 
-def test_runner_unavailable_when_env_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stamp(path: Path) -> dict[str, str]:
+    return {"path": path.as_posix(), "test": TEST_NAME}
+
+
+def test_runner_unavailable_when_env_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: None)
-    result = _pinned_env.run_pinned_capture(catalog.anchor(), {"patch": "x"})
+    bound = tmp_path / "_ave_bound.py"
+    bound.write_text("def test_authorization_boundary():\n    assert True\n", encoding="utf-8")
+    result = _pinned_env.run_bound(_stamp(bound), {"patch": "x"})
     assert result["status"] == "unavailable"
     assert result["attack_exchange"] is None
     assert result["flipped"] is None
     assert result["patch_applied"] is False
 
 
-def test_runner_reports_no_harness_for_non_anchor(
+def test_runner_reports_unavailable_for_missing_stamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: Path("/bin/true"))
-    non_anchor: Finding = {"id": "I-99", "evidence": {"is_loop_anchor": False}}
-    result = _pinned_env.run_pinned_capture(non_anchor, {"patch": "x"})
+    result = _pinned_env.run_bound(
+        {"path": "results/runs/missing/bound/_ave_bound.py", "test": TEST_NAME},
+        {"patch": "x"},
+    )
     assert result["status"] == "unavailable"
-    assert "harness" in result["detail"]
 
 
 def test_sanitized_exchange_accepts_a_clean_transcript() -> None:
@@ -208,7 +218,7 @@ def _simulate_available_env(
     monkeypatch: pytest.MonkeyPatch, result: dict[str, Any]
 ) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: Path("/bin/true"))
-    monkeypatch.setattr(_pinned_env, "run_pinned_capture", lambda finding, prepared=None: result)
+    monkeypatch.setattr(_pinned_env, "run_bound", lambda stamp, prepared=None: result)
 
 
 def test_opted_in_run_captures_exchange_and_takes_t1_from_pinned(
@@ -330,7 +340,9 @@ def test_prepare_fix_patch_applies_to_real_target_file(tmp_path: Path) -> None:
     original = _GET_ORDER.read_text(encoding="utf-8")
     assert "current_user" not in original
     pack = get_default_pack()
-    fix = pack.prepare_fix(catalog.anchor())
+    finding = next(f for f in pack.find("target/dvrestaurant@d32d0997").kept if pack.can_drive(f))
+    pack.bind_run(tmp_path)
+    fix = pack.prepare_fix(finding)
     patch = str(fix["patch"])
     assert _PATCH_REL in patch
     assert "_skeleton_target.py" not in patch
@@ -370,7 +382,7 @@ def test_harness_executes_current_target_source_not_a_substitute() -> None:
     assert src.index("assert exchange is not None") < src.index("json.dump")
 
 
-def test_run_capture_rejects_nonzero_even_if_file_exists(
+def test_run_capture_keeps_payload_when_pytest_exits_nonzero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -388,7 +400,8 @@ def test_run_capture_rejects_nonzero_even_if_file_exists(
 
     monkeypatch.setattr(_pinned_env.subprocess, "run", fake_run)
     result = _pinned_env._run_capture(Path("/bin/true"), Path("."), "x.py")
-    assert result == {"kind": "failure", "status": "test_failed"}
+    assert result["kind"] == "success"
+    assert result["payload"]["status"] == 200
 
 
 def test_run_capture_drops_inherited_python_paths(
@@ -425,7 +438,7 @@ def test_run_capture_drops_inherited_python_paths(
 
 
 def test_nonzero_pytest_with_capture_is_test_failed(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: Path("/bin/true"))
     monkeypatch.setattr(
@@ -433,8 +446,17 @@ def test_nonzero_pytest_with_capture_is_test_failed(
         "_run_capture",
         lambda *args, **kwargs: {"kind": "failure", "status": "test_failed"},
     )
-    result = _pinned_env.run_pinned_capture(
-        catalog.anchor(), {"patch": "--- a/x\n+++ b/x\n"}
+
+    def _stage(src: Path, dst: Path, ignore: object = None) -> None:
+        del src, ignore
+        dst.mkdir(parents=True)
+
+    monkeypatch.setattr(_pinned_env.shutil, "copytree", _stage)
+    bound = tmp_path / "_ave_bound.py"
+    bound.write_text("def test_authorization_boundary():\n    assert True\n", encoding="utf-8")
+    result = _pinned_env.run_bound(
+        _stamp(bound),
+        {"patch": "--- a/x\n+++ b/x\n"},
     )
     assert result["status"] == "test_failed"
     assert result["flipped"] is None
@@ -442,8 +464,12 @@ def test_nonzero_pytest_with_capture_is_test_failed(
     assert _LEAK not in result["detail"]
 
 
-def test_missing_patch_is_patch_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_patch_is_patch_failed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(_pinned_env, "_resolve_interpreter", lambda: Path("/bin/true"))
-    result = _pinned_env.run_pinned_capture(catalog.anchor(), {})
+    bound = tmp_path / "_ave_bound.py"
+    bound.write_text("def test_authorization_boundary():\n    assert True\n", encoding="utf-8")
+    result = _pinned_env.run_bound(_stamp(bound), {})
     assert result["status"] == "patch_failed"
     assert result["patch_applied"] is False

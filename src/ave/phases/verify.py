@@ -6,8 +6,8 @@ structurally: `ready_to_merge` can be True only with a fully green ladder AND a 
 record. The exploit oracle has **inverted polarity**: it passes (True) while the target is
 vulnerable and must fail (False) once the fix holds — so T1 is "flipped", not "passed".
 
-Skeleton: only T1 is a real check (the oracle flips on the pack's one instance). T0,
-T2, and re-attack stay false until those rungs exist, so `ready_to_merge` stays false.
+Unpinned T1 stays false. Pinned T1 is green only from a stored pinned success.
+T0, T2, and re-attack stay false until those rungs exist, so `ready_to_merge` stays false.
 No selected finding or prepared change => an all-false ladder.
 """
 
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ave.adapters import get_default_pack
 from ave.records.store import make_span, now_iso
 from ave.state import AVEState, PinnedExploitResult, VerificationLadder
 
@@ -48,10 +47,7 @@ def verify(state: AVEState) -> AVEState:
                 attributes["pinned_status"] = pinned["status"]
                 attributes["pinned_detail"] = pinned.get("detail")
         else:
-            pack = get_default_pack()
-            exploit_before = pack.run_exploit(selected, fixed=False)
-            exploit_after = pack.run_exploit(selected, fixed=True)
-            ladder["t1_exploit_oracle_flipped"] = exploit_before and not exploit_after
+            ladder["t1_exploit_oracle_flipped"] = False
 
     green = all(ladder.values())
     has_record = state.get("decision_record") is not None

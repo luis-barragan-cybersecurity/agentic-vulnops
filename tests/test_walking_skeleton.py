@@ -37,7 +37,7 @@ def test_loop_runs_end_to_end_and_produces_a_pr() -> None:
     assert str(final.get("pr_ref")).startswith("local:pr/")
     assert final.get("verification") == {
         "t0_build": False,
-        "t1_exploit_oracle_flipped": True,
+        "t1_exploit_oracle_flipped": False,
         "t2_full_suite": False,
         "reattack_clean": False,
     }
@@ -93,15 +93,26 @@ def test_catalog_ground_truth_holds_every_seeded_instance() -> None:
         assert oracle["polarity"] == "inverted"
 
 
-def test_find_rediscovers_gaps_and_binds_one_drivable_anchor() -> None:
-    batch = get_default_pack().find("target/dvrestaurant@d32d0997")
+def test_find_rediscovers_gaps_and_binds_one_drivable_anchor(tmp_path: Path) -> None:
+    pack = get_default_pack()
+    batch = pack.find("target/dvrestaurant@d32d0997")
     findings = list(batch.kept)
     assert len(findings) > 1
     assert {f["source"] for f in findings} == {"ave:llm-finder"}
-    drivable = [f for f in findings if f["evidence"].get("is_loop_anchor")]
+    for finding in findings:
+        assert "oracle" not in finding["evidence"]
+        assert "is_loop_anchor" not in finding["evidence"]
+    drivable = [f for f in findings if pack.can_drive(f)]
     assert len(drivable) == 1
     assert drivable[0]["location"] == catalog.anchor_location()
-    assert drivable[0]["evidence"]["oracle"]["polarity"] == "inverted"
+    pack.bind_run(tmp_path)
+    pack.prepare_fix(drivable[0])
+    assert drivable[0]["evidence"]["oracle"] == {
+        "path": drivable[0]["evidence"]["oracle"]["path"],
+        "test": "test_authorization_boundary",
+    }
+    assert drivable[0]["evidence"]["oracle"]["test"] == "test_authorization_boundary"
+    assert drivable[0]["evidence"]["oracle"]["path"].endswith("bound/_ave_bound.py")
     assert batch.suppressed == ()
 
 

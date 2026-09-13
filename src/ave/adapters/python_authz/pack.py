@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import difflib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from ave.adapters.base import FindingBatch, PinnedExploitResult, PreparedFix
 from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
+from ave.adapters.python_authz._binding import BindingError, _ExploitBinder
 from ave.adapters.python_authz.code_facts import CodeFactsStore
 from ave.adapters.python_authz.cull import (
     cull_attributes,
@@ -63,23 +64,19 @@ def get_order(
 """
 
 
-def _is_anchor_identity(finding: Finding) -> bool:
+def _has_route(finding: Finding) -> bool:
+    evidence = finding.get("evidence")
+    handler = evidence.get("handler") if isinstance(evidence, dict) else None
+    if not isinstance(handler, dict):
+        return False
+    method = handler.get("method")
+    path = handler.get("path")
     return (
-        finding.get("location") == catalog.anchor_location()
-        and finding.get("kind") == OWNERSHIP_GAP
+        isinstance(method, str)
+        and bool(method.strip())
+        and isinstance(path, str)
+        and bool(path.strip())
     )
-
-
-def _bind_anchor(original: Finding) -> Finding:
-    finding = cast("Finding", dict(original))
-    if not _is_anchor_identity(finding):
-        return finding
-    raw = finding.get("evidence", {})
-    evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
-    evidence["oracle"] = catalog.anchor_oracle()
-    evidence["is_loop_anchor"] = True
-    finding["evidence"] = evidence
-    return finding
 
 
 def _cleared_how(reason: str, hypothesis: dict[str, Any]) -> str:
@@ -115,13 +112,30 @@ def _cleared_rows(finding: Finding) -> list[dict[str, str]]:
 
 def _no_oracle(finding: Finding) -> NotImplementedError:
     return NotImplementedError(
-        f"{finding.get('id')} is not at the loop anchor location {catalog.anchor_location()}. "
-        f"Driving it needs a generated exploit bound to its own oracle (ticket 27)."
+        f"{finding.get('id')} is a finding this pack cannot finish."
     )
+
+
+def _stamp_if_present(finding: Finding) -> dict[str, str] | None:
+    evidence = finding.get("evidence")
+    raw = evidence.get("oracle") if isinstance(evidence, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    path = raw.get("path")
+    test = raw.get("test")
+    if not isinstance(path, str) or not path or test != "test_authorization_boundary":
+        return None
+    return {"path": path, "test": test}
 
 
 class PythonAuthzPack:
     name = "python_authz"
+
+    def __init__(self) -> None:
+        self._binder = _ExploitBinder(patch_rel=_PATCH_REL)
+
+    def bind_run(self, run_root: Path) -> None:
+        self._binder.bind_run(run_root)
 
     def find(self, target_ref: str) -> FindingBatch:
         del target_ref
@@ -130,10 +144,12 @@ class PythonAuthzPack:
         cull_client = default_model_client(CULL_FIXTURES_DIR)
         report = LLMFinder(store, finder_client).find()
         accepted = [
-            AcceptedCandidate(record=candidate.record, finding=_bind_anchor(candidate.finding))
+            AcceptedCandidate(record=candidate.record, finding=candidate.finding)
             for candidate in report.accepted
         ]
-        reviews = review_accepted(store, accepted, cull_client)
+        reviews = review_accepted(
+            store, accepted, cull_client, protect=self.can_drive
+        )
         kept, suppressed = pair_reviews(accepted, reviews)
         attrs = report.to_attributes()
         attrs["cull"] = cull_attributes(reviews, client_mode=cull_client.name)
@@ -151,26 +167,38 @@ class PythonAuthzPack:
         return f"{file}:{tail}"
 
     def can_drive(self, finding: Finding) -> bool:
-        """True only for the current hard-coded anchor identity plus oracle evidence.
-        A function-role-gap at the anchor location is not drivable."""
-        if not _is_anchor_identity(finding):
-            return False
-        evidence = finding.get("evidence", {})
-        if not isinstance(evidence, dict) or not evidence.get("is_loop_anchor"):
-            return False
-        oracle = evidence.get("oracle")
-        return isinstance(oracle, dict) and bool(oracle.get("path"))
-
-    def _is_anchor(self, finding: Finding) -> bool:
-        return self.can_drive(finding)
+        """Finishability: bind and patch this finding now."""
+        return (
+            finding.get("location") == catalog.anchor_location()
+            and finding.get("kind") == OWNERSHIP_GAP
+            and _has_route(finding)
+        )
 
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
         """Return reviewer commands and an explicitly unmeasured policy radius."""
-        if not self._is_anchor(finding):
+        if not self.can_drive(finding):
             raise _no_oracle(finding)
-        evidence = finding.get("evidence", {})
-        oracle = evidence.get("oracle", {}) if isinstance(evidence, dict) else {}
-        oracle_ref = f"{oracle.get('path')}::{oracle.get('test')}"
+        commands: list[dict[str, str]] = []
+        stamp = _stamp_if_present(finding)
+        if stamp is not None:
+            commands.append(
+                {
+                    "command": f"poetry run pytest {stamp['path']}::{stamp['test']}",
+                    "expect": (
+                        "FAILS after this fix (inverted polarity — this test IS the "
+                        "attack)"
+                    ),
+                }
+            )
+        commands.append(
+            {
+                "command": "cd target/dvrestaurant && poetry run pytest app/tests",
+                "expect": (
+                    "green — the target's own suite (the T2 rung; the ladder above "
+                    "is honest about not having run it)"
+                ),
+            }
+        )
         return {
             "changed_symbol": "get_order",
             "callers": ["route:GET /orders/{order_id}"],
@@ -180,26 +208,11 @@ class PythonAuthzPack:
             "dependents": None,
             "routes": None,
             "cleared": _cleared_rows(finding),
-            "before_you_merge": [
-                {
-                    "command": f"cd target/dvrestaurant && poetry run pytest {oracle_ref}",
-                    "expect": (
-                        "FAILS after this fix (inverted polarity — this test IS the "
-                        "attack); needs the target's pinned Poetry/Docker env"
-                    ),
-                },
-                {
-                    "command": "cd target/dvrestaurant && poetry run pytest app/tests",
-                    "expect": (
-                        "green — the target's own suite (the T2 rung; the ladder above "
-                        "is honest about not having run it)"
-                    ),
-                },
-            ],
+            "before_you_merge": commands,
         }
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
-        if not self._is_anchor(finding):
+        if not self.can_drive(finding):
             raise _no_oracle(finding)
         return {
             "changed_paths": ["app/apis/orders/services/get_order_service.py"],
@@ -208,8 +221,13 @@ class PythonAuthzPack:
         }
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:
-        if not self._is_anchor(finding):
+        if not self.can_drive(finding):
             raise _no_oracle(finding)
+        stamp = self._binder.ensure_bound(finding)
+        raw = finding.get("evidence")
+        evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
+        evidence["oracle"] = stamp
+        finding["evidence"] = evidence
         before = _GET_ORDER.read_text(encoding="utf-8")
         patch = "".join(
             difflib.unified_diff(
@@ -228,11 +246,8 @@ class PythonAuthzPack:
         )
 
     def run_exploit(self, finding: Finding, *, fixed: bool) -> bool:
-        """Run the anchor's exploit oracle against the vulnerable or fixed implementation.
-        Inverted polarity: True == exploit succeeded == still vulnerable. The hermetic
-        in-process oracle models the anchor's by-path exploit test
-        (`ave_seed_bola_order_read.py`), verified to flip this session."""
-        if not self._is_anchor(finding):
+        """Hermetic. Pack unit tests only. Not product T1."""
+        if not self.can_drive(finding):
             raise _no_oracle(finding)
         impl = target.get_order_fixed if fixed else target.get_order_vulnerable
         return target.exploit_cross_owner_read(impl)
@@ -245,4 +260,8 @@ class PythonAuthzPack:
     def run_pinned_exploit(
         self, finding: Finding, prepared: dict[str, Any]
     ) -> PinnedExploitResult:
-        return _pinned_env.run_pinned_capture(finding, prepared)
+        try:
+            stamp = self._binder.read_stamp(finding)
+        except BindingError:
+            return _pinned_env.unavailable("bound exploit stamp is missing or invalid")
+        return _pinned_env.run_bound(stamp, prepared)

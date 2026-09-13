@@ -11,11 +11,11 @@ from typing import Any, Literal, TypedDict
 from urllib.parse import unquote_plus
 
 from ave.adapters.base import PinnedExploitResult, PinnedStatus
-from ave.state import Finding
+from ave.adapters.python_authz._binding import TEST_NAME, _OracleStamp
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _TARGET_DIR = _REPO_ROOT / "target" / "dvrestaurant"
-_ANCHOR_CAPTURE = "app/tests/vulns/_ave_capture_bola_order_read.py"
+_BOUND_COPY = "app/tests/_ave_bound.py"
 _TIMEOUT_S = 300
 _POETRY_INFO_TIMEOUT_S = 60
 
@@ -97,6 +97,10 @@ def _outcome(
         "detail": detail,
         "patch_applied": patch_applied,
     }
+
+
+def unavailable(detail: str) -> PinnedExploitResult:
+    return _outcome("unavailable", detail)
 
 
 def _resolve_interpreter() -> Path | None:
@@ -292,12 +296,16 @@ def _patch_proved(path: Path) -> bool:
     return "current_user" in text and "current_user.id" in text and "user_id" in text
 
 
-def _capture_target(finding: Finding) -> str | None:
-    is_anchor = bool(
-        isinstance(finding.get("evidence"), dict)
-        and finding["evidence"].get("is_loop_anchor")
-    )
-    return _ANCHOR_CAPTURE if is_anchor else None
+def _stamp_source(stamp: _OracleStamp) -> Path | None:
+    raw = stamp.get("path")
+    test = stamp.get("test")
+    if not isinstance(raw, str) or not raw or test != TEST_NAME:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = _REPO_ROOT / path
+    resolved = path.resolve()
+    return resolved if resolved.is_file() else None
 
 
 def _flip(
@@ -370,17 +378,17 @@ def _run_capture(
             )
         except (OSError, subprocess.SubprocessError):
             return {"kind": "failure", "status": "launch_failed"}
+        payload: Any = None
+        if out_path.exists():
+            try:
+                payload = json.loads(out_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                payload = None
+        if isinstance(payload, dict) and isinstance(payload.get("status"), int):
+            return {"kind": "success", "payload": payload}
         if proc.returncode != 0:
             return {"kind": "failure", "status": "test_failed"}
-        if not out_path.exists():
-            return {"kind": "failure", "status": "malformed"}
-        try:
-            payload: Any = json.loads(out_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {"kind": "failure", "status": "malformed"}
-    if not isinstance(payload, dict) or not isinstance(payload.get("status"), int):
         return {"kind": "failure", "status": "malformed"}
-    return {"kind": "success", "payload": payload}
 
 
 def _combine(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
@@ -400,17 +408,34 @@ def _combine(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _run_patched_capture(
-    interpreter: Path,
-    capture_rel: str,
-    patch: str,
-    before_payload: dict[str, Any],
+def run_bound(
+    stamp: _OracleStamp, prepared: dict[str, Any] | None = None
 ) -> PinnedExploitResult:
+    interpreter = _resolve_interpreter()
+    if interpreter is None:
+        return unavailable("pinned environment is not available")
+    source = _stamp_source(stamp)
+    if source is None:
+        return unavailable("bound exploit stamp is missing or invalid")
+    patch = (prepared or {}).get("patch")
+    if not isinstance(patch, str) or not patch.strip():
+        return _outcome("patch_failed", "generated patch is missing")
+    capture_rel = f"{_BOUND_COPY}::{stamp['test']}"
     with tempfile.TemporaryDirectory() as tmp:
         repo_root = Path(tmp)
         copy_root = repo_root / "target" / "dvrestaurant"
         try:
             shutil.copytree(_TARGET_DIR, copy_root, ignore=_copy_ignore)
+            dest = copy_root / Path(_BOUND_COPY)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            return unavailable("could not stage the bound exploit")
+        before = _run_capture(interpreter, copy_root, capture_rel)
+        if before["kind"] == "failure":
+            status = before["status"]
+            return _outcome(status, f"pinned {status.replace('_', ' ')}")
+        try:
             patched = apply_unified_diff(repo_root, patch)
         except (OSError, ValueError):
             return _outcome("patch_failed", "generated patch did not apply")
@@ -424,24 +449,4 @@ def _run_patched_capture(
                 f"pinned {status.replace('_', ' ')}",
                 patch_applied=True,
             )
-        return _interpret(_combine(before_payload, after["payload"]))
-
-
-def run_pinned_capture(
-    finding: Finding, prepared: dict[str, Any] | None = None
-) -> PinnedExploitResult:
-    interpreter = _resolve_interpreter()
-    if interpreter is None:
-        return _outcome("unavailable", "pinned environment is not available")
-    capture_rel = _capture_target(finding)
-    if capture_rel is None:
-        return _outcome("unavailable", "no pinned capture harness for this finding")
-    patch = (prepared or {}).get("patch")
-    if not isinstance(patch, str) or not patch.strip():
-        return _outcome("patch_failed", "generated patch is missing")
-
-    before = _run_capture(interpreter, _TARGET_DIR, capture_rel)
-    if before["kind"] == "failure":
-        status = before["status"]
-        return _outcome(status, f"pinned {status.replace('_', ' ')}")
-    return _run_patched_capture(interpreter, capture_rel, patch, before["payload"])
+        return _interpret(_combine(before["payload"], after["payload"]))

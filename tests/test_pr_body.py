@@ -57,8 +57,9 @@ def test_default_run_span_shape_matches_example_run_contract() -> None:
 def test_default_run_discloses_hermetic_t1_provenance() -> None:
     body = _render_fresh()
     ladder = body[body.find("## Verification ladder") : body.find("## Blast radius")]
-    assert "hermetic in-process model flipped" in ladder
-    assert "generated patch was not executed by this run" in ladder
+    assert "hermetic in-process model flipped" not in ladder
+    assert "generated patch was not executed by this run" not in ladder
+    assert "| T1 — exploit oracle flipped (green → red) | ⬜ not green |" in ladder
 
 
 def test_committed_example_artifacts_share_the_fail_closed_route() -> None:
@@ -119,11 +120,9 @@ def test_rings_are_described_as_planned_not_executed() -> None:
 
 def test_unrun_rungs_are_honest_empties_never_green() -> None:
     body = _render_fresh()
-    # v1 runs T1 only; exactly that one rung may be green.
     ladder = body[body.find("## Verification ladder") : body.find("## Blast radius")]
-    assert ladder.count("✅") == 1
-    assert "T1" in ladder.split("✅")[0].splitlines()[-1]
-    assert ladder.count("| ⬜ not green |") == 3
+    assert ladder.count("✅") == 0
+    assert ladder.count("| ⬜ not green |") == 4
     assert "**Ready to merge: no**" in body
 
 
@@ -249,7 +248,8 @@ def test_still_open_draws_from_run_findings_not_the_answer_key() -> None:
 def test_before_you_merge_commands_are_runnable_and_include_the_oracle() -> None:
     body = _render_fresh()
     block = body[body.find("### Before you merge") : body.find("**Rings:**")]
-    assert "ave_seed_bola_order_read.py::test_bola_cross_customer_order_read" in block
+    assert "_ave_bound.py::test_authorization_boundary" in block
+    assert "ave_seed_bola_order_read.py" not in block
     assert "FAILS after this fix" in block, "inverted polarity must be stated"
     assert "poetry run pytest app/tests" in block, "the T2 suite is one of the commands"
 

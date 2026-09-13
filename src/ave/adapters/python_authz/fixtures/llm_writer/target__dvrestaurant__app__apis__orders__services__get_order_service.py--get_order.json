@@ -1,0 +1,18 @@
+{
+  "turns": [
+    [
+      {
+        "name": "submit_exploit",
+        "arguments": {
+          "method": "GET",
+          "path": "/orders/500",
+          "control_path": "/orders/3",
+          "victim_user_id": 99,
+          "victim_order_id": 500,
+          "leak_field": "user_id",
+          "leak_equals": 99
+        }
+      }
+    ]
+  ]
+}

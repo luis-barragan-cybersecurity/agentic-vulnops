@@ -11,7 +11,7 @@ the finder's tree impossible to open at all.
 The boundary is the exact one ``tests/test_target_de_leak.py`` already pins token-free, so
 the guarantee the guard test proves and the guarantee this allowlist enforces are the same
 line drawn once. The allowlist is **per-stage**: the finder gets the tree below; the
-exploit-writer stage (ticket 27) will construct a *different* one over ``app/tests/`` minus
+exploit-writer stage (ticket 27) constructs a *different* one over ``app/tests/`` minus
 ``app/tests/vulns/``. Two stages, two allowlists, one class.
 
 Nothing here imports or executes target code — files are only ever opened as text for the
@@ -114,5 +114,16 @@ def finder_allowlist() -> ScanAllowlist:
         name="finder",
         root=_TARGET_APP.resolve(),
         excluded=((_TARGET_APP / "tests").resolve(),),
+        suffixes=_FINDER_SUFFIXES,
+    )
+
+
+def writer_allowlist() -> ScanAllowlist:
+    """The exploit-writer allowlist: ``app/tests/`` minus ``app/tests/vulns/``, Python only."""
+    tests = (_TARGET_APP / "tests").resolve()
+    return ScanAllowlist(
+        name="writer",
+        root=tests,
+        excluded=((tests / "vulns").resolve(),),
         suffixes=_FINDER_SUFFIXES,
     )

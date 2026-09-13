@@ -3,9 +3,10 @@
 This is a committed, verbatim AVE run: the seeded anchor instance (I-04, the `get_order`
 object-ownership gap) walked through all seven phases
 (Intake → Match → Assess → Decide → [HITL gate] → Prepare → Execute → Verify) and produced
-a PR with a two-part decision record. T1 (exploit oracle flipped) is real. T0, T2, and
-re-attack stay unrun, so the PR is not ready to merge. This default example uses the
-hermetic in-process model for T1. It does not execute the generated patch.
+a PR with a two-part decision record. After HITL, Prepare writes
+`results/runs/<id>/bound/_ave_bound.py` and stamps `evidence["oracle"]`. Default T1 is
+not green: the unpinned run does not execute that bound pytest or the generated patch.
+T0, T2, and re-attack stay unrun, so the PR is not ready to merge.
 
 - [`run-record.json`](run-record.json) — the OTel-shaped run trace: one span per phase,
   plus the per-finding lifecycle (ticket 08's schema).
@@ -24,7 +25,7 @@ finder** became the finding source; regenerated at ticket 26 when the **adversar
 reviewed every accepted finding. This run now ingests **many** findings — every ownership
 and role gap the model rediscovered from the code-facts store, each `ave:llm-finder` and
 citation-validated — keeps all eight after the cull (no suppressions, no fail-open), and
-drives the one bound to the loop's hermetic oracle (the anchor, `get_order`). The Match
+drives the one finishable finding (`get_order` ownership + handler route). The Match
 span carries the coverage denominator (`examined N of M handlers`) and the full per-review
 cull report; the Assess span records the stated rank function, the driven finding, and the
 ones deferred until a generated exploit binds them (ticket 27); the PR body says
@@ -34,9 +35,9 @@ so this run needs no model access.
 
 ## What this is *not*
 
-T1 says the *loop mechanics* and the hermetic oracle work end to end. It does not prove
-that the generated patch changes the vendored target. Run with `AVE_PINNED_ENV=1` for that
-proof. T1 also does not show that AVE beats the Semgrep baseline. Those numbers come from
+T1 on this default run is an honest empty. It does not prove the generated patch changes
+the vendored target. Run with `AVE_PINNED_ENV=1` for that proof (pinned T1 reads capture
+JSON: 200 then 403 or 404). T1 also does not show that AVE beats the Semgrep baseline. Those numbers come from
 scoring real find-stage output against the catalog. The README results table stays empty
 until then. Unfilled blast-radius blocks (the one fact, measured counts) still render as
 honest empties. Cleared now comes from the cull's validated ruled-out hypotheses.

@@ -32,7 +32,7 @@ from ave.adapters.python_authz.llm_finder import (
     LLMFinder,
 )
 from ave.adapters.python_authz.model import FixtureModelClient, ToolCall, ToolResult
-from ave.adapters.python_authz.pack import FIXTURES_DIR, _bind_anchor
+from ave.adapters.python_authz.pack import FIXTURES_DIR
 from ave.adapters.python_authz.tools import CULL_RETRIEVAL, execute_retrieval
 from ave.prompts import load_prompt
 from ave.state import Finding
@@ -127,13 +127,14 @@ def test_bound_oracle_records_suppress_but_keeps_and_preserves_drivability() -> 
     finding = _finding(
         evidence={
             "rationale": "no ownership binding",
-            "oracle": {"path": "app/tests/vulns/x.py", "test": "t", "polarity": "inverted"},
-            "is_loop_anchor": True,
+            "handler": {"method": "GET", "path": "/orders/{order_id}"},
         }
     )
     before = dict(finding["evidence"])
     confidence = finding["confidence"]
-    review = resolve_submitted(finding, _stance("suppress", reason="looks guarded"), **_meta())
+    review = resolve_submitted(
+        finding, _stance("suppress", reason="looks guarded"), protected=True, **_meta()
+    )
     assert review.submitted is not None
     assert review.submitted.stance == "suppress"
     assert review.effective == "keep"
@@ -183,12 +184,7 @@ def test_redacted_case_omits_oracle_confidence_and_catalog() -> None:
     store = CodeFactsStore.build()
     report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
     anchor = next(c for c in report.accepted if c.record.symbol == "get_order")
-    bound = AcceptedCandidate(
-        record=anchor.record, finding=_bind_anchor(anchor.finding)
-    )
-    assert bound.finding["evidence"]["oracle"]
-    assert bound.finding["confidence"] == 0.9
-    case = redacted_case(bound)
+    case = redacted_case(anchor)
     blob = json.dumps(case)
     assert "oracle" not in blob
     assert "confidence" not in blob
@@ -237,7 +233,7 @@ def _anchor_candidate() -> AcceptedCandidate:
     store = CodeFactsStore.build()
     report = LLMFinder(store, FixtureModelClient(fixtures_dir=FIXTURES_DIR)).find()
     anchor = next(c for c in report.accepted if c.record.symbol == "get_order")
-    return AcceptedCandidate(record=anchor.record, finding=_bind_anchor(anchor.finding))
+    return AcceptedCandidate(record=anchor.record, finding=anchor.finding)
 
 
 def test_missing_submit_fail_opens_keep() -> None:
@@ -422,7 +418,8 @@ def test_review_one_suppress_without_oracle_is_suppressed() -> None:
 
 def test_review_one_suppress_against_bound_anchor_keeps_with_bound_oracle() -> None:
     candidate = _anchor_candidate()
-    assert candidate.finding["evidence"]["oracle"]
+    pack = get_default_pack()
+    assert pack.can_drive(candidate.finding) is True
     review = review_one(
         CodeFactsStore.build(),
         candidate,
@@ -431,6 +428,7 @@ def test_review_one_suppress_against_bound_anchor_keeps_with_bound_oracle() -> N
         ),
         budget=8,
         prompt_versions={"python_authz.llm_cull.system": 1},
+        protect=pack.can_drive,
     )
     assert review.submitted is not None
     assert review.submitted.stance == "suppress"
@@ -597,12 +595,10 @@ def test_pair_reviews_keeps_duplicate_location_kind_as_separate_rows() -> None:
 def test_role_gap_at_anchor_is_not_bound_protected_or_drivable() -> None:
     loc = catalog.anchor_location()
     finding = _finding(kind=ROLE_GAP, location=loc)
-    bound = _bind_anchor(finding)
-    assert bound["evidence"] == finding["evidence"]
-    assert "oracle" not in bound["evidence"]
-    assert not bound["evidence"].get("is_loop_anchor")
+    assert "oracle" not in finding["evidence"]
+    assert not finding["evidence"].get("is_loop_anchor")
     review = resolve_submitted(
-        bound,
+        finding,
         _stance("suppress"),
         location_key=loc,
         prompt_versions={},
@@ -614,12 +610,27 @@ def test_role_gap_at_anchor_is_not_bound_protected_or_drivable() -> None:
         kind=ROLE_GAP,
         location=loc,
         evidence={
+            "handler": {"method": "GET", "path": "/orders/{order_id}"},
             "oracle": {"path": "app/tests/x.py", "test": "t", "polarity": "inverted"},
             "is_loop_anchor": True,
         },
     )
-    assert get_default_pack().can_drive(_bind_anchor(smuggled)) is False
     assert get_default_pack().can_drive(smuggled) is False
+    only_oracle = _finding(
+        evidence={
+            "oracle": {"path": "app/tests/x.py", "test": "t"},
+            "is_loop_anchor": True,
+        }
+    )
+    unprotected = resolve_submitted(
+        only_oracle,
+        _stance("suppress"),
+        location_key=loc,
+        prompt_versions={},
+        client_mode="fixture",
+    )
+    assert unprotected.effective == "suppress"
+    assert unprotected.basis == "validated"
 
 
 def test_review_one_sends_exact_redacted_user_and_cull_tools() -> None:

@@ -8,6 +8,7 @@ change (the loop stays honest).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ave.adapters import get_default_pack
@@ -20,6 +21,10 @@ def prepare(state: AVEState) -> AVEState:
     started = now_iso()
     selected = state.get("selected_finding")
     pack = get_default_pack()
+    run_root = Path("results/runs") / str(state.get("run_record_id") or "unset")
+    bind = getattr(pack, "bind_run", None)
+    if callable(bind):
+        bind(run_root)
     change = pack.prepare_fix(selected) if selected is not None else None
 
     attributes: dict[str, Any] = {"prepared": change is not None}
