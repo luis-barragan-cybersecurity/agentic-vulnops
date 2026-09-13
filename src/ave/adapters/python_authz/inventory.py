@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -282,11 +283,10 @@ def _is_column_def(node: ast.expr) -> bool:
     )
 
 
-def _parse_models(source: str, file_rel: str) -> dict[str, ModelFacts]:
-    """Read the SQLAlchemy models out of one file: each class, its columns, and which of
-    them are owner columns (foreign keys to the users table; for the users table itself,
-    its identity columns)."""
-    tree = ast.parse(source)
+def _parse_models(tree: ast.Module, file_rel: str) -> dict[str, ModelFacts]:
+    """Read the SQLAlchemy models out of one parsed file: each class, its columns, and
+    which of them are owner columns (foreign keys to the users table; for the users table
+    itself, its identity columns)."""
     models: dict[str, ModelFacts] = {}
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
@@ -623,34 +623,50 @@ def _input_source(
     return "query" if is_scalar else "body"
 
 
-def build_inventory(allowlist: ScanAllowlist | None = None) -> Inventory:
-    """Walk the allowlisted target tree and produce the whole deterministic inventory:
-    every route handler as a facts-only record, and the model owner-column facts the
-    pre-filter and the model both read. Reads only through `allowlist`; no target code is
-    imported or run."""
-    allow = allowlist or finder_allowlist()
-    files = allow.files()
+@dataclass(frozen=True)
+class ParsedTree:
+    """One allowlisted file, read and parsed exactly once — the shared input of the
+    inventory pass and the call-graph pass (`callgraph.build_call_graph`), so neither
+    re-reads the tree."""
 
+    rel: str
+    tree: ast.Module
+
+
+def parse_allowlisted(allowlist: ScanAllowlist) -> list[ParsedTree]:
+    """Read and parse each allowlisted file once, in `allowlist.files()` order."""
+    return [
+        ParsedTree(rel=allowlist.rel(path), tree=ast.parse(allowlist.read_text(path)))
+        for path in allowlist.files()
+    ]
+
+
+def inventory_from(trees: Sequence[ParsedTree]) -> Inventory:
+    """The deterministic inventory pass over already-parsed trees: every route handler as
+    a facts-only record, and the model owner-column facts the pre-filter and the model
+    both read."""
     models: dict[str, ModelFacts] = {}
-    parsed: list[tuple[str, ast.Module]] = []
-    for path in files:
-        rel = allow.rel(path)
-        tree = ast.parse(allow.read_text(path))
-        parsed.append((rel, tree))
-        models.update(_parse_models(allow.read_text(path), rel))
+    for parsed in trees:
+        models.update(_parse_models(parsed.tree, parsed.rel))
 
     handlers: list[InventoryRecord] = []
-    for rel, tree in parsed:
-        aliases = _model_alias_map(tree)
-        for node in ast.walk(tree):
+    for parsed in trees:
+        aliases = _model_alias_map(parsed.tree)
+        for node in ast.walk(parsed.tree):
             route = _route_of(node)
             if route is None:
                 continue
             assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             method, route_path = route
             handlers.append(
-                _analyze_handler(node, method, route_path, rel, aliases, models)
+                _analyze_handler(node, method, route_path, parsed.rel, aliases, models)
             )
 
     handlers.sort(key=lambda r: r.handler_id)
     return Inventory(handlers=tuple(handlers), models=models)
+
+
+def build_inventory(allowlist: ScanAllowlist | None = None) -> Inventory:
+    """Walk the allowlisted target tree and produce the whole deterministic inventory.
+    Reads only through `allowlist`; no target code is imported or run."""
+    return inventory_from(parse_allowlisted(allowlist or finder_allowlist()))

@@ -33,11 +33,18 @@ from pathlib import Path
 from typing import Any
 
 from ave.adapters.python_authz.allowlist import ScanAllowlist, finder_allowlist
+from ave.adapters.python_authz.callgraph import (
+    CallGraph,
+    ResolvedEdge,
+    UnresolvedEdge,
+    build_call_graph,
+)
 from ave.adapters.python_authz.inventory import (
     Inventory,
     InventoryRecord,
     ModelFacts,
-    build_inventory,
+    inventory_from,
+    parse_allowlisted,
 )
 from ave.adapters.python_authz.prefilter import Screen, ScreenResult, screen_inventory
 
@@ -97,6 +104,50 @@ class Coverage:
         }
 
 
+@dataclass(frozen=True)
+class RouteRef:
+    """One route a reach touches, by handler id — enough for a report to name the
+    endpoints a change can affect without another store lookup."""
+
+    handler_id: str
+    method: str
+    path: str
+
+
+@dataclass(frozen=True)
+class ReachResult:
+    """The identity-aware transitive caller reach of one handler.
+
+    Completeness is derived, never stored: the two count properties return None on an
+    incomplete reach, and those two lines are the only place the never-convert-a-gap-
+    into-zero rule is enforced."""
+
+    handler_id: str
+    #: The start ``file:symbol`` is a top-level def the call graph can see. False for a
+    #: nested def (main.py's closure-registered doc routes), which no in-tree call could
+    #: have been bound to.
+    symbol_resolved: bool
+    #: Incoming call sites over the whole reach, excluding an edge whose caller
+    #: ``file:symbol`` is the start itself (recursion is not a dependent).
+    dependent_sites: tuple[ResolvedEdge, ...]
+    #: Every reached symbol that is an inventoried handler — including the start when it
+    #: is a route.
+    affected_routes: tuple[RouteRef, ...]
+    unresolved_edges: tuple[UnresolvedEdge, ...]
+
+    @property
+    def complete(self) -> bool:
+        return self.symbol_resolved and not self.unresolved_edges
+
+    @property
+    def dependents(self) -> int | None:
+        return len(self.dependent_sites) if self.complete else None
+
+    @property
+    def routes(self) -> int | None:
+        return len(self.affected_routes) if self.complete else None
+
+
 def strip_comments(source: str) -> str:
     """Return `source` with ``#`` comments removed, line numbers preserved. Uses the
     tokenizer, so a ``#`` inside a string literal is untouched; docstrings (string
@@ -113,24 +164,28 @@ def strip_comments(source: str) -> str:
 @dataclass(frozen=True)
 class CodeFactsStore:
     """The per-run code-facts store. Built once by the deterministic pass, then queried
-    through the typed tools below. Holds the inventory, the pre-filter screens, and the
-    allowlist every source read is funnelled through."""
+    through the typed tools below. Holds the inventory, the pre-filter screens, the bound
+    call graph, and the allowlist every source read is funnelled through."""
 
     inventory: Inventory
     screens: dict[str, ScreenResult]
     allowlist: ScanAllowlist
+    call_graph: CallGraph
 
     # -- construction ----------------------------------------------------------------
     @classmethod
     def build(cls, allowlist: ScanAllowlist | None = None) -> CodeFactsStore:
-        """Run the deterministic pass end to end: inventory the allowlisted tree, screen
-        every handler, and hold the result. No model, no network."""
+        """Run the deterministic pass end to end: parse the allowlisted tree once,
+        inventory it, screen every handler, and bind the call graph. No model, no
+        network."""
         allow = allowlist or finder_allowlist()
-        inventory = build_inventory(allow)
+        trees = parse_allowlisted(allow)
+        inventory = inventory_from(trees)
         return cls(
             inventory=inventory,
             screens=screen_inventory(inventory),
             allowlist=allow,
+            call_graph=build_call_graph(trees, app_root=allow.rel(allow.root)),
         )
 
     # -- typed tools -----------------------------------------------------------------
@@ -210,6 +265,48 @@ class CodeFactsStore:
         sites.sort(key=lambda s: (s.file, s.line))
         return sites
 
+    def reach_of(self, handler_id: str) -> ReachResult:
+        """The transitive caller reach of one handler, bound by identity rather than name
+        — the blast-radius measurement's raw material. Walks the reverse call graph from
+        the handler's ``file:symbol``; a recursive/self edge is not a dependent; every
+        unresolved edge naming a reached symbol is carried so a binding gap can never read
+        as zero. Every tuple is sorted, so the result is byte-stable. Raises
+        `HandlerNotFound` for an id the inventory does not hold."""
+        record = self.get_handler(handler_id)
+        start = f"{record.file}:{record.symbol}"
+        seen = {start}
+        queue = [start]
+        dependents: list[ResolvedEdge] = []
+        unresolved: set[UnresolvedEdge] = set()
+        while queue:
+            node = queue.pop()
+            symbol = node.rsplit(":", 1)[1]
+            for edge in self.call_graph.by_callee.get(node, ()):
+                caller = f"{edge.caller_file}:{edge.caller_symbol}"
+                if caller == start:
+                    continue
+                dependents.append(edge)
+                if edge.caller_symbol != "<module>" and caller not in seen:
+                    seen.add(caller)
+                    queue.append(caller)
+            unresolved.update(self.call_graph.unresolved_by_name.get(symbol, ()))
+        by_id = {r.handler_id: r for r in self.inventory.handlers}
+        return ReachResult(
+            handler_id=handler_id,
+            symbol_resolved=start in self.call_graph.top_level_defs,
+            dependent_sites=tuple(
+                sorted(dependents, key=lambda e: (e.caller_file, e.line, e.callee))
+            ),
+            affected_routes=tuple(
+                RouteRef(handler_id=n, method=by_id[n].method, path=by_id[n].path)
+                for n in sorted(seen)
+                if n in by_id
+            ),
+            unresolved_edges=tuple(
+                sorted(unresolved, key=lambda e: (e.caller_file, e.line, e.callee_name))
+            ),
+        )
+
     # -- coverage --------------------------------------------------------------------
     def coverage(self) -> Coverage:
         """The coverage denominator over this run's inventory."""
@@ -260,7 +357,9 @@ class CodeFactsStore:
     @classmethod
     def load(cls, path: Path, allowlist: ScanAllowlist | None = None) -> CodeFactsStore:
         """Rehydrate a store from its JSON. The allowlist is re-attached (source reads need
-        it); pass one for a non-finder stage, else the finder allowlist is used."""
+        it); pass one for a non-finder stage, else the finder allowlist is used. The call
+        graph is derived data with its source still on disk, so it is re-bound from the
+        allowlist rather than persisted — the JSON format is unchanged."""
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         if data.get("version") != STORE_VERSION:
             raise ValueError(
@@ -276,10 +375,14 @@ class CodeFactsStore:
             hid: ScreenResult(hid, s["screen"], s["reason"])
             for hid, s in data["screens"].items()
         }
+        allow = allowlist or finder_allowlist()
         return cls(
             inventory=inventory,
             screens=screens,
-            allowlist=allowlist or finder_allowlist(),
+            allowlist=allow,
+            call_graph=build_call_graph(
+                parse_allowlisted(allow), app_root=allow.rel(allow.root)
+            ),
         )
 
 

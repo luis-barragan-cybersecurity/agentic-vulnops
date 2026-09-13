@@ -21,6 +21,7 @@ one.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -30,9 +31,11 @@ from ave.adapters.python_authz.allowlist import (
     finder_allowlist,
     writer_allowlist,
 )
+from ave.adapters.python_authz.callgraph import ResolvedEdge
 from ave.adapters.python_authz.code_facts import (
     CodeFactsStore,
     HandlerNotFound,
+    RouteRef,
     strip_comments,
 )
 from ave.adapters.python_authz.inventory import build_inventory
@@ -295,3 +298,99 @@ def test_strip_comments_keeps_strings_and_docstrings() -> None:
     assert "# not a comment" in stripped  # inside a string literal — kept
     assert "docstring # inside" in stripped  # docstring — kept
     assert "a real comment" not in stripped  # the trailing comment — gone
+
+
+# --------------------------------------------------------------------------- blast radius
+
+
+def test_reach_of_anchor_is_complete_with_no_dependents() -> None:
+    store = CodeFactsStore.build()
+    hid = _handler_id("app/apis/orders/services/get_order_service.py", "get_order")
+    reach = store.reach_of(hid)
+    assert reach.symbol_resolved is True
+    assert reach.dependent_sites == ()
+    assert reach.unresolved_edges == ()
+    assert reach.complete is True
+    assert reach.dependents == 0
+    assert reach.routes == 1
+    assert reach.affected_routes == (
+        RouteRef(handler_id=hid, method="GET", path="/orders/{order_id}"),
+    )
+
+
+def test_reach_binds_same_named_helper_to_its_own_file() -> None:
+    """I-08's handler and its write helper share the name `update_menu_item`. The
+    name-only `callers_of` reports one site for the name; the identity-aware graph binds
+    that call to the helper in `apis/menu/utils.py`, so the *handler* has zero
+    dependents."""
+    store = CodeFactsStore.build()
+    helper = "target/dvrestaurant/app/apis/menu/utils.py:update_menu_item"
+    assert (
+        ResolvedEdge(
+            caller_file=(
+                "target/dvrestaurant/app/apis/menu/services/update_menu_item_service.py"
+            ),
+            caller_symbol="update_menu_item",
+            line=23,
+            callee=helper,
+        )
+        in store.call_graph.by_callee[helper]
+    )
+    hid = _handler_id("app/apis/menu/services/update_menu_item_service.py", "update_menu_item")
+    assert store.reach_of(hid).dependents == 0
+
+
+def test_reach_keeps_duplicate_symbols_distinct() -> None:
+    """Two unrelated handlers are both named `get_orders`; each reach must stay on its own
+    identity rather than bleed into the other's routes."""
+    store = CodeFactsStore.build()
+    customer = _handler_id("app/apis/orders/services/get_orders_service.py", "get_orders")
+    delivery = _handler_id(
+        "app/apis/orders/services/get_orders_for_delivery_service.py", "get_orders"
+    )
+    customer_reach = store.reach_of(customer)
+    delivery_reach = store.reach_of(delivery)
+    assert customer_reach.routes == 1
+    assert delivery_reach.routes == 1
+    assert customer_reach.affected_routes[0].handler_id == customer
+    assert delivery_reach.affected_routes[0].handler_id == delivery
+    assert customer != delivery
+
+
+def test_reach_of_nested_handler_is_incomplete() -> None:
+    """main.py's doc routes are nested defs the call graph cannot see; the reach says so —
+    counts are None, never a confident zero — while the start route itself is still
+    recorded."""
+    store = CodeFactsStore.build()
+    reach = store.reach_of(_handler_id("app/main.py", "root_docs"))
+    assert reach.symbol_resolved is False
+    assert reach.complete is False
+    assert reach.dependents is None
+    assert reach.routes is None
+    assert len(reach.affected_routes) == 1
+
+
+def test_store_load_rederives_the_call_graph(tmp_path: Path) -> None:
+    """The JSON format carries no call graph; `load` re-binds it from the allowlist, and a
+    reloaded store answers `reach_of` byte-for-byte like the store that was written."""
+    store = CodeFactsStore.build()
+    path = store.write(tmp_path)
+    reloaded = CodeFactsStore.load(path)
+    hid = _handler_id("app/apis/orders/services/get_order_service.py", "get_order")
+    assert reloaded.reach_of(hid).routes == 1
+    assert reloaded.reach_of(hid) == store.reach_of(hid)
+
+
+def test_call_graph_edge_counts_match_the_prototype() -> None:
+    """The verified ticket-28 prototype bound 140 calls and left 248 unresolved on this
+    fixture (246 unknown receivers, 2 unbound names; no attribute or expression gaps). A
+    port that produces different numbers is a wrong port."""
+    call_graph = CodeFactsStore.build().call_graph
+    assert sum(len(v) for v in call_graph.by_callee.values()) == 140
+    assert sum(len(v) for v in call_graph.unresolved_by_name.values()) == 248
+    reasons = Counter(
+        edge.reason
+        for edges in call_graph.unresolved_by_name.values()
+        for edge in edges
+    )
+    assert reasons == {"receiver_type_unknown": 246, "unbound_name": 2}
