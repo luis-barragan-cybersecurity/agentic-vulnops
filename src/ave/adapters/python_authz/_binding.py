@@ -30,11 +30,11 @@ class _OracleStamp(TypedDict):
 
 
 class BindingError(ValueError):
-    """The binder could not produce or read a valid stamp."""
+    pass
 
 
 class BindingConflict(BindingError):
-    """Same path already holds different bytes. The existing file is left untouched."""
+    pass
 
 
 def _handler(finding: Finding) -> tuple[str, str]:

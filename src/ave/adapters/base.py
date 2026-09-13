@@ -110,9 +110,7 @@ class LanguagePack(Protocol):
         ...
 
     def can_drive(self, finding: Finding) -> bool:
-        """Finishability: the pack can bind a pytest and emit a patch for `finding` now.
-        A run ingests every finding a source produced, but Assess drives only the
-        highest-ranked finding this returns True for."""
+        """Finishability: the pack can bind a pytest and emit a patch for `finding` now."""
         ...
 
 

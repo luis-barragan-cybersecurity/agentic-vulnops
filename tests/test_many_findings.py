@@ -299,8 +299,6 @@ def test_no_run_finding_ever_carries_the_ground_truth_source() -> None:
 
 
 def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
-    # The LLM finder (ticket 25) turns on real multiplicity: a run ingests every gap the
-    # model rediscovered, all `ave:llm-finder`, and drives the one bound to the loop oracle.
     final = run_once(_INITIAL, auto_approve=True)
     assert len(final["findings"]) > 1
     assert {f["source"] for f in final["findings"]} == {"ave:llm-finder"}
@@ -313,7 +311,6 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     assert rationale["candidates"] == len(final["findings"])
     assert rationale["selected"] == driven["id"]
     assert rationale["driven_is_top_ranked"] is True
-    # Every other rediscovered finding is real but not yet drivable (ticket 27 binds them).
     assert len(rationale["deferred_pending_exploit"]) == len(final["findings"]) - 1
     match = next(s for s in final["spans"] if s["phase"] == "match")
     assert match["attributes"]["found"] == len(final["findings"])

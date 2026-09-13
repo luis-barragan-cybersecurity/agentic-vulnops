@@ -110,7 +110,7 @@ def _cleared_rows(finding: Finding) -> list[dict[str, str]]:
     return rows
 
 
-def _no_oracle(finding: Finding) -> NotImplementedError:
+def _cannot_finish(finding: Finding) -> NotImplementedError:
     return NotImplementedError(
         f"{finding.get('id')} is a finding this pack cannot finish."
     )
@@ -167,7 +167,6 @@ class PythonAuthzPack:
         return f"{file}:{tail}"
 
     def can_drive(self, finding: Finding) -> bool:
-        """Finishability: bind and patch this finding now."""
         return (
             finding.get("location") == catalog.anchor_location()
             and finding.get("kind") == OWNERSHIP_GAP
@@ -177,7 +176,7 @@ class PythonAuthzPack:
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
         """Return reviewer commands and an explicitly unmeasured policy radius."""
         if not self.can_drive(finding):
-            raise _no_oracle(finding)
+            raise _cannot_finish(finding)
         commands: list[dict[str, str]] = []
         stamp = _stamp_if_present(finding)
         if stamp is not None:
@@ -213,7 +212,7 @@ class PythonAuthzPack:
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
         if not self.can_drive(finding):
-            raise _no_oracle(finding)
+            raise _cannot_finish(finding)
         return {
             "changed_paths": ["app/apis/orders/services/get_order_service.py"],
             "is_class_level": True,
@@ -222,7 +221,7 @@ class PythonAuthzPack:
 
     def prepare_fix(self, finding: Finding) -> PreparedFix:
         if not self.can_drive(finding):
-            raise _no_oracle(finding)
+            raise _cannot_finish(finding)
         stamp = self._binder.ensure_bound(finding)
         raw = finding.get("evidence")
         evidence: dict[str, Any] = dict(raw) if isinstance(raw, dict) else {}
@@ -248,7 +247,7 @@ class PythonAuthzPack:
     def run_exploit(self, finding: Finding, *, fixed: bool) -> bool:
         """Hermetic. Pack unit tests only. Not product T1."""
         if not self.can_drive(finding):
-            raise _no_oracle(finding)
+            raise _cannot_finish(finding)
         impl = target.get_order_fixed if fixed else target.get_order_vulnerable
         return target.exploit_cross_owner_read(impl)
 

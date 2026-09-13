@@ -10,9 +10,7 @@ the finder's tree impossible to open at all.
 
 The boundary is the exact one ``tests/test_target_de_leak.py`` already pins token-free, so
 the guarantee the guard test proves and the guarantee this allowlist enforces are the same
-line drawn once. The allowlist is **per-stage**: the finder gets the tree below; the
-exploit-writer stage (ticket 27) constructs a *different* one over ``app/tests/`` minus
-``app/tests/vulns/``. Two stages, two allowlists, one class.
+line drawn once.
 
 Nothing here imports or executes target code — files are only ever opened as text for the
 AST pass (`inventory`) and the source-serving tool (`code_facts.get_source`).
