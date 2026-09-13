@@ -7,7 +7,7 @@ from typing import Any
 from ave.adapters.base import FindingBatch, PinnedExploitResult, PreparedFix
 from ave.adapters.python_authz import _pinned_env, catalog
 from ave.adapters.python_authz import _skeleton_target as target
-from ave.adapters.python_authz._binding import BindingError, _ExploitBinder
+from ave.adapters.python_authz._binding import TARGET_NODE, BindingError, _ExploitBinder
 from ave.adapters.python_authz.code_facts import CodeFactsStore
 from ave.adapters.python_authz.cull import (
     cull_attributes,
@@ -182,7 +182,11 @@ class PythonAuthzPack:
         if stamp is not None:
             commands.append(
                 {
-                    "command": f"poetry run pytest {stamp['path']}::{stamp['test']}",
+                    "command": (
+                        f"cp {stamp['path']} target/dvrestaurant/{TARGET_NODE} && "
+                        f"cd target/dvrestaurant && poetry run pytest "
+                        f"{TARGET_NODE}::{stamp['test']}"
+                    ),
                     "expect": (
                         "FAILS after this fix (inverted polarity — this test IS the "
                         "attack)"

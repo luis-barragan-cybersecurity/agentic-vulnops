@@ -11,11 +11,11 @@ from typing import Any, Literal, TypedDict
 from urllib.parse import unquote_plus
 
 from ave.adapters.base import PinnedExploitResult, PinnedStatus
-from ave.adapters.python_authz._binding import TEST_NAME, _OracleStamp
+from ave.adapters.python_authz._binding import TARGET_NODE, TEST_NAME, _OracleStamp
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _TARGET_DIR = _REPO_ROOT / "target" / "dvrestaurant"
-_BOUND_COPY = "app/tests/_ave_bound.py"
+_BOUND_COPY = TARGET_NODE
 _TIMEOUT_S = 300
 _POETRY_INFO_TIMEOUT_S = 60
 

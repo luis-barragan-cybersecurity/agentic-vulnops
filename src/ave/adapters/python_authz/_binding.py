@@ -14,6 +14,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 WRITER_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "llm_writer"
 SUBMIT_EXPLOIT = "submit_exploit"
 TEST_NAME: Literal["test_authorization_boundary"] = "test_authorization_boundary"
+TARGET_NODE: Literal["app/tests/_ave_bound.py"] = "app/tests/_ave_bound.py"
 _BOUND_NAME = "_ave_bound.py"
 _GET_ORDER_HANDLER = (
     "target/dvrestaurant/app/apis/orders/services/get_order_service.py:get_order"

@@ -150,6 +150,26 @@ def test_can_drive_is_finishability_without_oracle() -> None:
     assert pack.can_drive(smuggled) is False
 
 
+def test_blast_radius_oracle_command_copies_into_target_tests() -> None:
+    pack = get_default_pack()
+    finding = _finding(
+        evidence={
+            "handler": dict(_HANDLER),
+            "oracle": {
+                "path": "results/runs/abc/bound/_ave_bound.py",
+                "test": "test_authorization_boundary",
+            },
+        }
+    )
+    command = pack.blast_radius(finding)["before_you_merge"][0]["command"]
+    assert command == (
+        "cp results/runs/abc/bound/_ave_bound.py "
+        "target/dvrestaurant/app/tests/_ave_bound.py && "
+        "cd target/dvrestaurant && poetry run pytest "
+        "app/tests/_ave_bound.py::test_authorization_boundary"
+    )
+
+
 def test_prepare_fix_stamps_oracle_and_emits_get_order_patch(tmp_path: Path) -> None:
     pack = get_default_pack()
     pack.bind_run(tmp_path)
