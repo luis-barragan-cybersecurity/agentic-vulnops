@@ -248,9 +248,18 @@ def test_still_open_draws_from_run_findings_not_the_answer_key() -> None:
 def test_before_you_merge_commands_are_runnable_and_include_the_oracle() -> None:
     body = _render_fresh()
     block = body[body.find("### Before you merge") : body.find("**Rings:**")]
-    assert "_ave_bound.py::test_authorization_boundary" in block
+    fences = re.findall(r"```bash\n# expect: ([^\n]+)\n([^\n]+)\n```", block)
+    assert fences, "reviewer commands must be pasteable bash"
+    expect, command = fences[0]
+    assert "FAILS after this fix" in expect
+    assert command.startswith("cp ")
+    assert " target/dvrestaurant/app/tests/_ave_bound.py && " in command
+    assert command.endswith(
+        "cd target/dvrestaurant && poetry run pytest "
+        "app/tests/_ave_bound.py::test_authorization_boundary"
+    )
+    assert "bound/_ave_bound.py" in command
     assert "ave_seed_bola_order_read.py" not in block
-    assert "FAILS after this fix" in block, "inverted polarity must be stated"
     assert "poetry run pytest app/tests" in block, "the T2 suite is one of the commands"
 
 
