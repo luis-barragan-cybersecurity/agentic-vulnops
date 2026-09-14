@@ -27,7 +27,7 @@ Preconditions:
 - **CLI entry.** Run `.cursor/skills/verify-ave/control-ave capture inventory -- cli -- inventory`. Exit code `0`.
 - **Coverage.** The first line is `inventory: examined 18 of 27 handlers.` The next line reports `examine 15, cheap 3, dropped 9`.
 - **Handlers.** Stdout has 27 handler lines. The anchor includes `examine`, `GET`, `/orders/{order_id}`, and `get_order`.
-- **Contract tests.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tests -- pytest -- tests/test_code_facts.py -q`. Exit code `0`; stdout reports `22 passed`. These tests cover the scan and query contracts, including the writer allowlist.
+- **Contract tests.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tests -- pytest -- tests/test_code_facts.py -q`. Exit code `0`; stdout reports `28 passed`. These tests cover the scan and query contracts, including the writer allowlist, and the identity-aware caller reach (`reach_of`) the blast-radius pass reads: the anchor reaches `0` dependents and `1` route, the same-named `update_menu_item` helper binds to its own file, and a nested `main.py` handler reports an incomplete reach.
 - **No write.** Run `.cursor/skills/verify-ave/control-ave capture inventory-tracked-clean -- git diff --exit-code -- README.md target`. Exit code `0`.
 - **Proof.** Keep `artifacts/inventory/`, `artifacts/inventory-tests/`, and `artifacts/inventory-tracked-clean/`.
 

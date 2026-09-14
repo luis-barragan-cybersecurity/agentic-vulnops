@@ -56,6 +56,7 @@ Put `.cursor/skills/verify-ave` on `PATH` or invoke the script by path. Always g
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_pr_body.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_many_findings.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_code_facts.py
+.cursor/skills/verify-ave/control-ave pytest -- tests/test_blast_radius.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_llm_finder.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_cull.py
 .cursor/skills/verify-ave/control-ave pytest -- tests/test_binding.py
@@ -70,7 +71,11 @@ Stable handles:
 - CLI subcommand names: `run`, `break`, `eradicate`, `scoreboard`, `inventory`, `find`
 - Inventory summary `inventory: examined 18 of 27 handlers.`
 - Inventory screen counts `examine 15, cheap 3, dropped 9`
-- Inventory contract node `tests/test_code_facts.py` (22 tests)
+- Inventory contract node `tests/test_code_facts.py` (28 tests; includes the identity-aware `reach_of` cases)
+- Blast-radius contract node `tests/test_blast_radius.py` (11 tests)
+- Measured blast radius on the fixture run: Assess span `blast_radius` `files 1`, `dependents 0`, `routes 1`, fact `how_sure 5` with `provenance ast_resolved`; `selection.dependents_measured: 8`; Decide span `hitl_route: out_of_policy_change`
+- PR-body blast-radius rows `| Files changed | 1 | 3 |`, `| Dependent call sites | 0 | 25 |`, `| Routes affected | 1 | 15 |`, and `How sure: **5/5**`
+- Still open Where cells in `file:line` form, e.g. `app/apis/menu/services/update_menu_item_service.py:15`
 - Binding contract node `tests/test_binding.py` (11 tests)
 - Find summary `find: examined 18 of 27 handlers.`
 - Finder summary `finder: 8 accepted, 7 finder-cleared, 0 rejected, 0 exhausted`
@@ -85,7 +90,7 @@ Stable handles:
 - Pause pytest node `tests/test_graph_smoke.py::test_run_halts_at_the_hitl_gate_before_approval`
 - Resume pytest node `tests/test_walking_skeleton.py::test_loop_runs_end_to_end_and_produces_a_pr`
 - PR-body contract node `tests/test_pr_body.py` (24 tests; golden comparison normalizes only run IDs and timestamps)
-- Finding fan-in contract node `tests/test_many_findings.py` (26 tests; synthetic inputs cover attribution, de-duplication, ranking, open lifecycles, and suppressed false positives)
+- Finding fan-in contract node `tests/test_many_findings.py` (28 tests; synthetic inputs cover attribution, de-duplication, ranking, open lifecycles, suppressed false positives, and the external merge winner inheriting the pack measurement)
 - Pinned-run contract node `tests/test_pinned_env.py` (53 tests)
 - Pinned opt-in environment variable `AVE_PINNED_ENV`
 - Baseline heading `AVE role-pattern Semgrep baseline — score vs target catalog`
@@ -111,7 +116,7 @@ Proof standards:
 - Capture the command, stdout, stderr, and exit code. For `run` and `eradicate`, the four summary lines are the user-visible result. The OTel JSON blob is a side effect of tracing, not the product.
 - `inventory` parses the allowlisted target application as text, prints one screen per route handler, and writes no code-facts file. Confirm the summary, the 27 handler lines, and a clean `README.md` / `target/`.
 - Check side effects, not slogans. `break` prints that the catalog is already seeded and writes nothing under `target/`. `scoreboard` prints a ticket-05 stub and does not edit the README. `run` / `eradicate` write gitignored files under `results/runs/<id>/`. Confirm `git -C <repo> status --porcelain -- README.md target` stays empty.
-- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, quotes the rank function, leaves every ladder rung including T1 unpainted, and reports readiness `no`. Before you merge copies `results/runs/<id>/bound/_ave_bound.py` to `target/dvrestaurant/app/tests/_ave_bound.py`, then runs that node from `target/dvrestaurant`, plus `poetry run pytest app/tests`. Its Cleared table contains one ruled-out ownership-guard hypothesis and explains the missing `user_id` comparison with a source citation. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison. Confirm the bound file exists next to the run record.
+- The generated PR body is a product artifact. Inspect the path printed by `run`; it says `Selected 1 of 8 ingested findings`, names `ave:llm-finder`, quotes the rank function with `dependents measured for 8 of 8`, shows the measured blast radius `1 / 0 / 1` against the policy limits with a `5/5` AST-resolved fact, records `HITL route fired: **out_of_policy_change**`, leaves every ladder rung including T1 unpainted, and reports readiness `no`. `Unproven` in the one-fact block or `unmeasured` in the table is a regression on the fixture, not the expected state. Before you merge copies `results/runs/<id>/bound/_ave_bound.py` to `target/dvrestaurant/app/tests/_ave_bound.py`, then runs that node from `target/dvrestaurant`, plus `poetry run pytest app/tests`. Its Cleared table contains one ruled-out ownership-guard hypothesis and explains the missing `user_id` comparison with a source citation. The default run declares an uncaptured exchange. A successful pinned run renders three `http` blocks. Use `tests/test_pr_body.py` for the locked section order and committed golden comparison. Confirm the bound file exists next to the run record.
 - The default pack emits eight kept findings from fixture replay. Inspect the run record for Match `found: 8`, `ingested: 8`, `suppressed: 0`, and `sources: ["ave:llm-finder"]`. Under `find_stage.cull`, verify `reviewed: 8`, `kept: 8`, `suppressed: 0`, `fail_open: 0`, and `bound_oracle_overrides: 0`. Assess drives `ave-llm-get_order_service-get_order` and records the other seven as deferred. All eight default lifecycles stay `open`. Only the driven finding has `triaged_at` set. Use `tests/test_many_findings.py` for the suppressed false-positive lifecycle, `tests/test_cull.py` for suppression and fail-open behavior, and `tests/test_llm_finder.py` for fixture recall. Do not report these results as a live-model run.
 - An accepted pinned capture has `pinned_status: success`, `pinned_patch_applied: true`, and `attack_exchange_captured: true` in the Prepare span. Verify has `t1_runner: pinned` and `pinned_status: success`. These fields prove that AVE copied `bound/_ave_bound.py` into an isolated tree at `app/tests/_ave_bound.py` and ran that node before and after the generated patch. The tracked target remains unchanged.
 - A requested pinned failure records its explicit `pinned_status`, leaves T1 red, and keeps `t1_runner: pinned`. It never falls back to the hermetic result. Treat `not_flipped`, `unavailable`, `launch_failed`, `patch_failed`, `test_failed`, `malformed`, and `unsafe_capture` as failed pinned proof.

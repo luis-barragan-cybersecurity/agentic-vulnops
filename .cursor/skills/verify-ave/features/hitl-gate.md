@@ -1,6 +1,6 @@
 # HITL gate
 
-A fresh graph run stops before the `prepare` node until something sets `human_approved` and resumes. The CLI always auto-approves, so a user cannot see the pause from `ave run`. The observable pause proof today is the smoke test that calls `run_once(..., auto_approve=False)`.
+A fresh graph run stops before the `prepare` node until the caller resumes it. `run_once` records `human_approved = True` on the paused state and then resumes. The CLI always auto-approves, so a user cannot see the pause from `ave run`. The observable pause proof today is the smoke test that calls `run_once(..., auto_approve=False)`.
 
 ## Sub-features
 
@@ -28,7 +28,7 @@ Preconditions:
 
 ## Gotchas
 
-- `paused_at_gate` and `run_once(auto_approve=False)` need a checkpointer. Tests pass `MemorySaver`. Compiling the graph without one runs straight through. Do not "drive" `build_graph()` with no checkpointer and call that the gate.
+- `paused_at_gate` and `run_once(auto_approve=False)` need a checkpointer. Both construct a `MemorySaver` internally; tests pass none. Compiling the graph without one runs straight through. Do not "drive" `build_graph()` with no checkpointer and call that the gate.
 - Docs mention a draft PR at the interrupt. `pr_ref` is set in Execute, after Prepare. A paused run has `pr_ref is None`.
 - `human_approved` on the paused state is `False` from Decide. Prepare, Execute, and Verify never read that flag. The pause is LangGraph `interrupt_before=["prepare"]`.
 - Passing `make test` covers this node plus others. Name the node id in the artifact if you used the full suite, and still do not skip the pause-specific test when this feature is the claim.
