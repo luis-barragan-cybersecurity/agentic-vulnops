@@ -22,7 +22,8 @@ is in git history); regenerated at ticket 09 with the landed governance schemas
 (policy `1.0.0`, per-finding lifecycle) and the locked PR-body template; regenerated at
 ticket 24 with the many-findings run shape; regenerated again at ticket 25 when the **LLM
 finder** became the finding source; regenerated at ticket 26 when the **adversarial cull**
-reviewed every accepted finding. This run now ingests **many** findings — every ownership
+reviewed every accepted finding; regenerated at ticket 28 when the **blast-radius pass**
+measured the selected change. This run now ingests **many** findings — every ownership
 and role gap the model rediscovered from the code-facts store, each `ave:llm-finder` and
 citation-validated — keeps all eight after the cull (no suppressions, no fail-open), and
 drives the one finishable finding (`get_order` ownership + handler route). The Match
@@ -31,7 +32,13 @@ cull report; the Assess span records the stated rank function, the driven findin
 ones deferred until a generated exploit binds them (ticket 27); the PR body says
 "Selected 1 of N", lists the rest as Still open, and fills Cleared from the selected
 finding's validated ruled-out hypotheses. The finder and cull replay recorded transcripts,
-so this run needs no model access.
+so this run needs no model access. Since ticket 28, `find()` measures each kept finding
+against the store's identity-aware call graph and records the result under
+`evidence["blast_radius_measurement"]`. The Assess span carries the driven finding's
+projection (files 1, dependents 0, routes 1), its `ast_resolved` fact at `how_sure: 5`,
+and `selection.dependents_measured: 8`. The PR body renders the same counts against the
+policy limits 3 / 25 / 15, states the one fact at How sure 5/5, and lists each Still open
+row by the reviewer-facing `file:line` from `evidence["review_location"]`.
 
 ## What this is *not*
 
@@ -39,7 +46,8 @@ T1 on this default run is an honest empty. It does not prove the generated patch
 the vendored target. Run with `AVE_PINNED_ENV=1` for that proof (pinned T1 reads capture
 JSON: 200 then 403 or 404). T1 also does not show that AVE beats the Semgrep baseline. Those numbers come from
 scoring real find-stage output against the catalog. The README results table stays empty
-until then. Unfilled blast-radius blocks (the one fact, measured counts) still render as
-honest empties. Cleared now comes from the cull's validated ruled-out hypotheses.
+until then. The blast-radius blocks on this run are measured, not empty. A dimension the
+call graph cannot bind would still render as the honest `unmeasured`, never as a zero.
+Cleared now comes from the cull's validated ruled-out hypotheses.
 
 Live runs write to `results/runs/<id>/` (git-ignored); regenerate with `make run`.

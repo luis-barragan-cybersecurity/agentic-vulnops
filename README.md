@@ -62,7 +62,9 @@ AVE is deliberately scoped. It does **not** attempt:
 
 **The PR is the product.** Every PR AVE opens is built to be reviewed in about two minutes:
 
-- A generated **blast-radius view** — which callers and routes the change touches.
+- A generated **blast-radius view** — which callers and routes the change touches. The
+  pack measures it in `find()` from an identity-aware AST call graph. A binding gap
+  renders as `unmeasured`, never as a zero.
 - The **deployment-ring** framing — what the change does in production, ring by ring.
 - A two-part **decision record** citing the `policy.yaml` version that authorized the fix.
 - A green **verification ladder** — T0 build, T1 the flipped exploit oracle, T2 the full
@@ -120,7 +122,7 @@ flowchart LR
 
   subgraph SEAM["Language-pack seam · ave.adapters.LanguagePack"]
     direction TB
-    PROTO["Protocol<br/>find · blast_radius · fix_plan · prepare_fix · run_exploit · legitimate_use_holds"]:::seam
+    PROTO["Protocol<br/>find · measured_dependents · blast_radius · fix_plan · prepare_fix · run_exploit · legitimate_use_holds"]:::seam
     PY["python_authz — the v1 pack<br/>Python / FastAPI · BOLA / BFLA"]:::seam
     NEXT["second pack — roadmap<br/>e.g. Rails + Postgres, BOLA-first"]:::future
     PROTO --- PY
@@ -148,7 +150,7 @@ flowchart LR
   end
 
   MA -- "find()" --> PROTO
-  AS -- "blast_radius() · fix_plan()" --> PROTO
+  AS -- "measured_dependents() · blast_radius() · fix_plan()" --> PROTO
   PP -- "prepare_fix()" --> PROTO
   VE -- "run_exploit() · T1 only" --> PROTO
   DE -- "decide()" --> POL
@@ -181,8 +183,8 @@ flowchart TB
   classDef rung fill:#f4f4f5,stroke:#52525b,color:#18181b
 
   IN["1 · Intake<br/>pin the target ref and the policy version · open the run record"]:::phase
-  MA["2 · Match<br/>fan-in over finding sources · attribute · merge on (dedup_key, kind)<br/>pack.find() still emits only the catalog anchor"]:::phase
-  AS["3 · Assess<br/>rank by the stated function · select the head<br/>pack.blast_radius() · pack.fix_plan()"]:::phase
+  MA["2 · Match<br/>fan-in over finding sources · attribute · merge on (dedup_key, kind)<br/>pack.find() emits the LLM finder's culled findings"]:::phase
+  AS["3 · Assess<br/>rank by the stated function · select the head<br/>pack.measured_dependents() · pack.blast_radius() · pack.fix_plan()"]:::phase
   DE["4 · Decide<br/>decide(finding, fix_plan, blast_radius, policy) · two-part decision record"]:::phase
   AUTO["Autonomous<br/>policy can return this · unused on the seeded instance"]:::ok
   ESC["Escalation — a named decide() route<br/>out_of_policy_change · blast_radius_exceeded · unknown_blast_radius"]:::stop
