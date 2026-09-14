@@ -16,9 +16,11 @@ real vendored-target catalog is ticket 04; a second-language pack is roadmap (D3
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from ave.findings import Dependents
 from ave.state import Finding
 from ave.state import PinnedExploitResult as PinnedExploitResult
 from ave.state import PinnedStatus as PinnedStatus
@@ -40,7 +42,9 @@ class FindingBatch:
 class PreparedFix(dict[str, Any]):
     """A class-level change plus the artifacts a PR needs. A plain dict subclass so it
     threads through graph state unchanged; keys: `class_level`, `summary`, `patch`
-    (unified diff), `patch_caveat`, `finding_id`, `blast_radius`.
+    (unified diff), `patch_paths` (unique target-relative paths the patch touches;
+    Prepare requires them to equal the fix plan's `changed_paths`), `patch_caveat`,
+    `finding_id`, `blast_radius`.
 
     `patch_caveat` is the pack's one-sentence warning to the reviewer, rendered above the
     diff, for when the patch does not apply cleanly to the target as shipped. The pack
@@ -75,10 +79,18 @@ class LanguagePack(Protocol):
         visible and honest rather than a source silently dropped by a wrong merge."""
         ...
 
+    def measured_dependents(self, findings: Iterable[Finding]) -> Dependents:
+        """finding id -> measured dependent call sites. A finding this pack did not
+        measure is absent; `rank_findings` reads an absent key as unmeasured. This is the
+        one seam Assess obtains the counts through — the core never parses a pack
+        evidence key."""
+        ...
+
     def blast_radius(self, finding: Finding) -> dict[str, Any]:
-        """The caller/PR-level reach of a change to this finding's symbol. Carries the
+        """A projection of the measurement the pack recorded in `find()`: the
         policy-facing dimensions `files` / `dependents` / `routes` the governance
-        predicate is measured against, alongside the reviewer-facing caller view.
+        predicate is measured against, alongside the reviewer-facing blocks. A finding
+        with a measurement is readable even when `can_drive()` is false.
 
         Per ticket 06's PR-body contract, this same pass emits the body's four
         blast-radius blocks via optional keys — `fact` ({statement, how_sure: 1-5 |

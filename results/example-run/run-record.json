@@ -1,12 +1,12 @@
 {
-  "run_id": "a94ff4299ccd433a85be78178949d6f1",
+  "run_id": "f4e75118b52a421d8945675a501c2eeb",
   "target_ref": "target/dvrestaurant@d32d0997",
   "policy_version": "1.0.0",
   "spans": [
     {
       "phase": "intake",
-      "started_at": "2026-09-13T05:05:13.600697+00:00",
-      "ended_at": "2026-09-13T05:05:13.615312+00:00",
+      "started_at": "2026-09-13T23:59:25.855592+00:00",
+      "ended_at": "2026-09-13T23:59:25.877025+00:00",
       "attributes": {
         "target_ref": "target/dvrestaurant@d32d0997",
         "pack": "python_authz"
@@ -14,8 +14,8 @@
     },
     {
       "phase": "match",
-      "started_at": "2026-09-13T05:05:13.616178+00:00",
-      "ended_at": "2026-09-13T05:05:13.786703+00:00",
+      "started_at": "2026-09-13T23:59:25.877732+00:00",
+      "ended_at": "2026-09-13T23:59:26.088955+00:00",
       "attributes": {
         "found": 8,
         "ingested": 8,
@@ -554,21 +554,21 @@
     },
     {
       "phase": "assess",
-      "started_at": "2026-09-13T05:05:13.787526+00:00",
-      "ended_at": "2026-09-13T05:05:13.787589+00:00",
+      "started_at": "2026-09-13T23:59:26.089691+00:00",
+      "ended_at": "2026-09-13T23:59:26.089807+00:00",
       "attributes": {
         "selected": true,
         "selection": {
           "rank_function": "confidence desc \u2192 measured dependents asc (unmeasured last) \u2192 location asc \u2192 ingest order",
           "candidates": 8,
-          "dependents_measured": 0,
+          "dependents_measured": 8,
           "selected": "ave-llm-get_order_service-get_order",
           "why": "highest confidence (0.9 against 0.86 for the runner-up)",
           "ranking": [
             {
               "id": "ave-llm-get_order_service-get_order",
               "confidence": 0.9,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/orders/services/get_order_service.py:get_order",
               "sources": [
                 "ave:llm-finder"
@@ -577,7 +577,7 @@
             {
               "id": "ave-llm-update_profile_service-update_profile",
               "confidence": 0.86,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/auth/services/update_profile_service.py:update_profile",
               "sources": [
                 "ave:llm-finder"
@@ -586,7 +586,7 @@
             {
               "id": "ave-llm-service-get_discount_coupons",
               "confidence": 0.86,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/referrals/service.py:get_discount_coupons",
               "sources": [
                 "ave:llm-finder"
@@ -595,7 +595,7 @@
             {
               "id": "ave-llm-service-get_referral_code_endpoint",
               "confidence": 0.85,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/referrals/service.py:get_referral_code_endpoint",
               "sources": [
                 "ave:llm-finder"
@@ -604,7 +604,7 @@
             {
               "id": "ave-llm-update_user_role_service-update_user_role",
               "confidence": 0.84,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/users/services/update_user_role_service.py:update_user_role",
               "sources": [
                 "ave:llm-finder"
@@ -613,7 +613,7 @@
             {
               "id": "ave-llm-delete_menu_item_service-delete_menu_item",
               "confidence": 0.83,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/menu/services/delete_menu_item_service.py:delete_menu_item",
               "sources": [
                 "ave:llm-finder"
@@ -622,7 +622,7 @@
             {
               "id": "ave-llm-update_menu_item_service-update_menu_item",
               "confidence": 0.82,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/menu/services/update_menu_item_service.py:update_menu_item",
               "sources": [
                 "ave:llm-finder"
@@ -631,7 +631,7 @@
             {
               "id": "ave-llm-get_orders_for_delivery_service-get_orders",
               "confidence": 0.8,
-              "dependents": null,
+              "dependents": 0,
               "location": "app/apis/orders/services/get_orders_for_delivery_service.py:get_orders",
               "sources": [
                 "ave:llm-finder"
@@ -649,39 +649,70 @@
             "ave-llm-service-get_referral_code_endpoint",
             "ave-llm-update_user_role_service-update_user_role"
           ]
+        },
+        "blast_radius": {
+          "files": 1,
+          "dependents": 0,
+          "routes": 1,
+          "fact": {
+            "statement": "The AST inventory identifies get_order as the GET /orders/{order_id} route handler. A complete caller-index query found no dependent call sites in the allowlisted tree.",
+            "provenance": "ast_resolved",
+            "how_sure": 5,
+            "proof": "The inventory cites target/dvrestaurant/app/apis/orders/services/get_order_service.py:11-20. The recorded reach is complete, and dependent_sites is empty.",
+            "citations": [
+              {
+                "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                "start_line": 11,
+                "end_line": 20,
+                "contains": "def get_order("
+              }
+            ]
+          },
+          "cleared": [
+            {
+              "ruled_out": "A post-fetch ownership guard binds db_order to current_user on every path",
+              "how": "The handler returns db_order after a fetch by order_id with no user_id comparison (target/dvrestaurant/app/apis/orders/services/get_order_service.py:11-20 \u2014 return db_order)"
+            }
+          ],
+          "before_you_merge": [
+            {
+              "command": "cd target/dvrestaurant && poetry run pytest app/tests",
+              "expect": "green \u2014 the target's own suite (the T2 rung; the ladder above is honest about not having run it)"
+            }
+          ]
         }
       }
     },
     {
       "phase": "decide",
-      "started_at": "2026-09-13T05:05:13.788490+00:00",
-      "ended_at": "2026-09-13T05:05:13.792620+00:00",
+      "started_at": "2026-09-13T23:59:26.091034+00:00",
+      "ended_at": "2026-09-13T23:59:26.095514+00:00",
       "attributes": {
         "route": "hitl_approved",
-        "hitl_route": "unknown_blast_radius",
+        "hitl_route": "out_of_policy_change",
         "autonomous": false
       }
     },
     {
       "phase": "prepare",
-      "started_at": "2026-09-13T05:05:13.795391+00:00",
-      "ended_at": "2026-09-13T05:05:13.799170+00:00",
+      "started_at": "2026-09-13T23:59:26.097897+00:00",
+      "ended_at": "2026-09-13T23:59:26.102059+00:00",
       "attributes": {
         "prepared": true
       }
     },
     {
       "phase": "execute",
-      "started_at": "2026-09-13T05:05:13.801042+00:00",
-      "ended_at": "2026-09-13T05:05:13.801051+00:00",
+      "started_at": "2026-09-13T23:59:26.102786+00:00",
+      "ended_at": "2026-09-13T23:59:26.102790+00:00",
       "attributes": {
-        "pr_ref": "local:pr/a94ff4299ccd433a85be78178949d6f1"
+        "pr_ref": "local:pr/f4e75118b52a421d8945675a501c2eeb"
       }
     },
     {
       "phase": "verify",
-      "started_at": "2026-09-13T05:05:13.802340+00:00",
-      "ended_at": "2026-09-13T05:05:13.802349+00:00",
+      "started_at": "2026-09-13T23:59:26.103692+00:00",
+      "ended_at": "2026-09-13T23:59:26.103699+00:00",
       "attributes": {
         "ladder_green": false,
         "ready": false
@@ -691,7 +722,7 @@
   "findings": [
     {
       "finding_id": "ave-llm-update_profile_service-update_profile",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -699,7 +730,7 @@
     },
     {
       "finding_id": "ave-llm-delete_menu_item_service-delete_menu_item",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -707,7 +738,7 @@
     },
     {
       "finding_id": "ave-llm-update_menu_item_service-update_menu_item",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -715,15 +746,15 @@
     },
     {
       "finding_id": "ave-llm-get_order_service-get_order",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
-      "triaged_at": "2026-09-13T05:05:13.788490+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
+      "triaged_at": "2026-09-13T23:59:26.091034+00:00",
       "verified_at": null,
       "outcome": "open",
       "ladder_ever_green_then_red": false
     },
     {
       "finding_id": "ave-llm-get_orders_for_delivery_service-get_orders",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -731,7 +762,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_discount_coupons",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -739,7 +770,7 @@
     },
     {
       "finding_id": "ave-llm-service-get_referral_code_endpoint",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",
@@ -747,7 +778,7 @@
     },
     {
       "finding_id": "ave-llm-update_user_role_service-update_user_role",
-      "first_observed_at": "2026-09-13T05:05:13.600697+00:00",
+      "first_observed_at": "2026-09-13T23:59:25.855592+00:00",
       "triaged_at": null,
       "verified_at": null,
       "outcome": "open",

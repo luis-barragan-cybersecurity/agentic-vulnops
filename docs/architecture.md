@@ -16,11 +16,11 @@ flowchart LR
 | Phase | Responsibility | Seam call |
 |-------|----------------|-----------|
 | **Intake** | Pin the target ref + policy version; open the run record. | — |
-| **Match** | Fan-in over every finding source: attribute each `Finding` with its `source`, then merge findings from different sources that name the same flaw on `(dedup_key, kind)`, keeping both sources and the higher confidence (`ave.findings`). Today the pack's `find()` is the only source and emits the catalog anchor (`I-04`), so a run ingests exactly one. | `find()`, `dedup_key()` |
-| **Assess** | Rank the batch by the stated function (confidence desc → measured dependents asc → location asc), select the head to drive, record the rationale in state and in the span; measure reach, propose a fix. Every other ingested finding stays `open` in the run record. | `blast_radius()`, `fix_plan()` |
+| **Match** | Fan-in over every finding source: attribute each `Finding` with its `source`, then merge findings from different sources that name the same flaw on `(dedup_key, kind)`, keeping both sources and the higher confidence (`ave.findings`). The pack's `find()` is still the only source; it emits the LLM finder's culled, citation-validated findings, and the fixture run ingests eight. | `find()`, `dedup_key()` |
+| **Assess** | Rank the batch by the stated function (confidence desc → measured dependents asc → location asc), select the head to drive, record the rationale in state and in the span; project the reach the pack already measured in `find()`, propose a fix. One `measured_dependents()` mapping feeds both the ranking and the drivable selection, and the measured radius lands on the span. Every other ingested finding stays `open` in the run record. | `measured_dependents()`, `blast_radius()`, `fix_plan()` |
 | **Decide** | Evaluate the proposed remediation against `policy.yaml` with the pure `decide()`; produce the two-part decision record citing the policy version. | — |
 | **HITL gate** | `interrupt()` before Prepare. Structural, never a prompt. `ave run` auto-approves. A paused run has no `pr_ref`. | — |
-| **Prepare** | `prepare_fix()` builds an in-process `PreparedFix`. `pr_ref` stays unset. | `prepare_fix()` |
+| **Prepare** | `prepare_fix()` builds an in-process `PreparedFix`. A patch that touches different paths than the fix plan's `changed_paths` raises `PatchScopeMismatch` before Execute. `pr_ref` stays unset. | `prepare_fix()` |
 | **Execute** | Stamp `local:pr/<run_id>`. Does not apply a change to the vendored app. `persist_run` writes the bundle after the graph. | — |
 | **Verify** | T1 via `run_exploit()` only. T0, T2, and re-attack stay unrun. Does not call `legitimate_use_holds()`. `ready_to_merge` stays false. | `run_exploit()` |
 
@@ -33,7 +33,12 @@ target-specific plugs in behind [`ave.adapters`](../src/ave/adapters/README.md):
 `LanguagePack` protocol (finding sources, blast-radius extraction, a proposed fix plan, fix
 templates, and an exploit-oracle harness with inverted polarity). v1's single pack is
 `python_authz` (Python/FastAPI, BOLA/BFLA) against the vendored, pinned target in
-[`target/`](../target/README.md). This checkout does not start that FastAPI app. Adding a
+[`target/`](../target/README.md). This checkout does not start that FastAPI app. The
+pack's `CodeFactsStore` binds an identity-aware call graph
+(`python_authz/callgraph.py`) over the allowlisted tree and answers
+`reach_of(handler_id)`. `find()` measures every kept finding against that reach and
+records the result under `evidence["blast_radius_measurement"]`, and a binding gap reads
+as unmeasured (`None`), never as a zero. Adding a
 language is an adapter-plus-config change against the unchanged core; the roadmap's second
 pack is a Rails + Postgres vertical, BOLA-first.
 

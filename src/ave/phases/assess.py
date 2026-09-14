@@ -13,10 +13,10 @@ findings awaiting a generated exploit (ticket 27). So Assess selects the top-ran
 `pack.can_drive()` accepts, and records the top-ranked-overall finding and the ones deferred
 alongside it — the run never crashes on a finding it cannot yet prove, and it never hides one.
 
-The dependents term is inert today and the rationale says so (`dependents_measured: 0`):
-`blast_radius()` reports dependents as unmeasured for the drivable finding and raises for
-the rest, so no candidate is probed for it here. The measured blast-radius pass (ticket 28)
-makes the term real; the function does not change.
+The dependents term is real (ticket 28): the fixture run reports `dependents_measured: 8`.
+One mapping from `pack.measured_dependents()` feeds both orderings, so the rationale and
+the selected finding never use different orders. The public blast radius is recorded on
+this phase's span, so an agent reads the same counts a human reads in the PR body.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from ave.adapters import get_default_pack
-from ave.findings import rank_findings, select_head
+from ave.findings import Dependents, rank_findings, select_head
 from ave.records.store import make_span, now_iso
 from ave.state import AVEState, Finding
 
@@ -33,8 +33,9 @@ def assess(state: AVEState) -> AVEState:
     started = now_iso()
     findings = state.get("findings", [])
     pack = get_default_pack()
-    top_ranked, rationale = select_head(findings)
-    driven = _first_drivable(findings, pack)
+    dependents = pack.measured_dependents(findings)
+    top_ranked, rationale = select_head(findings, dependents=dependents)
+    driven = _first_drivable(findings, pack, dependents=dependents)
 
     rationale["top_ranked"] = top_ranked.get("id") if top_ranked is not None else None
     rationale["selected"] = driven.get("id") if driven is not None else None
@@ -66,16 +67,22 @@ def assess(state: AVEState) -> AVEState:
             make_span(
                 "assess",
                 started,
-                {"selected": driven is not None, "selection": rationale},
+                {
+                    "selected": driven is not None,
+                    "selection": rationale,
+                    "blast_radius": assessment.get("blast_radius"),
+                },
             )
         ],
     }
 
 
-def _first_drivable(findings: list[Finding], pack: Any) -> Finding | None:
+def _first_drivable(
+    findings: list[Finding], pack: Any, *, dependents: Dependents
+) -> Finding | None:
     """The highest-ranked finding the pack can drive to a verified fix, or None if the run
     ingested none it can prove yet."""
-    for finding in rank_findings(findings):
+    for finding in rank_findings(findings, dependents=dependents):
         if pack.can_drive(finding):
             return finding
     return None

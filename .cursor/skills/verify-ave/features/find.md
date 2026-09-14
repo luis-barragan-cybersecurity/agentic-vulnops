@@ -1,6 +1,6 @@
 # LLM finder
 
-`ave find` runs the LLM finder over the inventory, then runs an adversarial cull over every accepted finding. Offline by default both stages replay recorded fixtures. It does not start a model, write a run record, or mutate `README.md` / `target/`. The default fixtures keep all eight accepted findings.
+`ave find` runs the LLM finder over the inventory, measures each accepted finding's blast radius against the same code-facts store, then runs an adversarial cull over every accepted finding. Offline by default both stages replay recorded fixtures. It does not start a model, write a run record, or mutate `README.md` / `target/`. The default fixtures keep all eight accepted findings.
 
 ## Sub-features
 

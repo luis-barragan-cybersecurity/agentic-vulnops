@@ -62,18 +62,18 @@ def test_default_run_discloses_hermetic_t1_provenance() -> None:
     assert "| T1 — exploit oracle flipped (green → red) | ⬜ not green |" in ladder
 
 
-def test_committed_example_artifacts_share_the_fail_closed_route() -> None:
+def test_committed_example_artifacts_share_the_measured_policy_route() -> None:
     record = json.loads(_RUN_RECORD.read_text(encoding="utf-8"))
     decide_span = next(span for span in record["spans"] if span["phase"] == "decide")
     assert decide_span["attributes"] == {
         "route": "hitl_approved",
-        "hitl_route": "unknown_blast_radius",
+        "hitl_route": "out_of_policy_change",
         "autonomous": False,
     }
 
     body = _GOLDEN.read_text(encoding="utf-8")
     assert (
-        "- Route: **hitl_approved** · HITL route fired: **unknown_blast_radius**"
+        "- Route: **hitl_approved** · HITL route fired: **out_of_policy_change**"
         in body
     )
     assert f"- Decided by: agent at {decide_span['started_at']}" in body
@@ -200,7 +200,7 @@ def test_valid_captured_exchange_renders_verbatim() -> None:
     ) < body.find("## Blast radius")
 
 
-def test_unmeasured_blast_radius_fails_closed_and_renders_honestly() -> None:
+def test_measured_blast_radius_routes_out_of_policy_and_renders_the_counts() -> None:
     state = run_once(_INITIAL, auto_approve=True)
     decision = dict(state.get("decision_record") or {})
     execution = dict(decision.get("execution") or {})
@@ -208,20 +208,25 @@ def test_unmeasured_blast_radius_fails_closed_and_renders_honestly() -> None:
     blast = dict(change.get("blast_radius") or {})
 
     assert execution["route"] == "hitl_approved"
-    assert execution["hitl_route"] == "unknown_blast_radius"
-    assert [blast.get(key) for key in ("files", "dependents", "routes")] == [
-        None,
-        None,
-        None,
-    ]
+    assert execution["hitl_route"] == "out_of_policy_change"
+    assert [blast.get(key) for key in ("files", "dependents", "routes")] == [1, 0, 1]
 
     body = render_pr_body(state)
     radius = body[body.find("## Blast radius") : body.find("### Still open")]
-    assert "| Files changed | unmeasured | 3 |" in radius
-    assert "| Dependent call sites | unmeasured | 25 |" in radius
-    assert "| Routes affected | unmeasured | 15 |" in radius
-    assert "**Unproven.**" in radius
-    assert "Blast radius: files unmeasured / dependents unmeasured / routes unmeasured" in body
+    assert "| Files changed | 1 | 3 |" in radius
+    assert "| Dependent call sites | 0 | 25 |" in radius
+    assert "| Routes affected | 1 | 15 |" in radius
+    assert (
+        "The AST inventory identifies get_order as the GET /orders/{order_id} route "
+        "handler. A complete caller-index query found no dependent call sites in the "
+        "allowlisted tree."
+    ) in radius
+    assert "How sure: **5/5**" in radius
+    assert "Blast radius: files 1 / dependents 0 / routes 1" in body
+
+    still_open = body[body.find("### Still open") : body.find("### Cleared")]
+    assert "`app/apis/menu/services/update_menu_item_service.py:15`" in still_open
+    assert "update_menu_item_service.py:update_menu_item" not in still_open
 
 
 def test_unfilled_fact_renders_unproven() -> None:
@@ -268,13 +273,13 @@ def test_no_router_or_file_tree_diagrams() -> None:
     assert "```mermaid" not in body, "vetoed: diagrams unless nodes are risks (v1: none)"
 
 
-def test_unmeasured_counts_sit_in_a_small_table_against_policy_limits() -> None:
+def test_measured_counts_sit_in_a_small_table_against_policy_limits() -> None:
     body = _render_fresh()
     radius = body[body.find("## Blast radius") : body.find("### The one fact")]
     assert f"Limit (policy `{policy_version()}`)" in radius
-    assert "| Files changed | unmeasured | 3 |" in radius
-    assert "| Dependent call sites | unmeasured | 25 |" in radius
-    assert "| Routes affected | unmeasured | 15 |" in radius
+    assert "| Files changed | 1 | 3 |" in radius
+    assert "| Dependent call sites | 0 | 25 |" in radius
+    assert "| Routes affected | 1 | 15 |" in radius
 
 
 def _with_cleared(final: AVEState, rows: list[dict[str, str]]) -> AVEState:
@@ -410,7 +415,7 @@ def test_policy_limits_fail_closed_when_versions_differ() -> None:
     body = render_pr_body({**state, "policy_version": "0.9.0"})
     radius = body[body.find("## Blast radius") : body.find("### The one fact")]
     assert "Limits unavailable: run cites policy `0.9.0`; current checkout has `1.0.0`." in radius
-    assert "| Files changed | unmeasured | — |" in radius
-    assert "| Dependent call sites | unmeasured | — |" in radius
-    assert "| Routes affected | unmeasured | — |" in radius
-    assert "| Files changed | unmeasured | 3 |" not in radius
+    assert "| Files changed | 1 | — |" in radius
+    assert "| Dependent call sites | 0 | — |" in radius
+    assert "| Routes affected | 1 | — |" in radius
+    assert "| Files changed | 1 | 3 |" not in radius

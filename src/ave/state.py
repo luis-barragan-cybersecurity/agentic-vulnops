@@ -13,6 +13,10 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
 
+#: Neutral, display-only ``file:line`` a source may record under `Finding.evidence`;
+#: never an identity (`location` stays the de-dup key).
+REVIEW_LOCATION = "review_location"
+
 
 class Finding(TypedDict, total=False):
     """A single candidate vulnerability surfaced during Match/Assess."""
@@ -28,7 +32,9 @@ class Finding(TypedDict, total=False):
     # flaw two sources agree on keeps both without losing which one led.
     source: str
     corroborated_by: list[str]
-    evidence: dict[str, Any]  # opaque, adapter-interpreted
+    # Opaque, adapter-interpreted. `REVIEW_LOCATION` is the one neutral key the renderer
+    # may read from it.
+    evidence: dict[str, Any]
 
 
 class VerificationLadder(TypedDict, total=False):
