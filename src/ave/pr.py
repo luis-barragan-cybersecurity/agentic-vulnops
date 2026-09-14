@@ -31,7 +31,7 @@ from urllib.parse import unquote_plus
 
 from ave.findings import all_sources
 from ave.policy import load_policy
-from ave.state import AVEState, Finding, PinnedExploitResult
+from ave.state import REVIEW_LOCATION, AVEState, Finding, PinnedExploitResult
 
 # Rung key -> (label, one-line meaning). Order is the ladder's order.
 _LADDER_ROWS: list[tuple[str, str]] = [
@@ -381,6 +381,15 @@ def _one_fact(blast: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _review_location(f: dict[str, Any]) -> str:
+    """The recorded reviewer-facing ``file:line`` when its shape checks out, else the
+    stable `location` — display only, never an identity."""
+    v = (f.get("evidence") or {}).get(REVIEW_LOCATION)
+    if isinstance(v, str) and re.fullmatch(r".+:\d+", v):
+        return v
+    return str(f.get("location", "?"))
+
+
 def _still_open(
     findings: list[dict[str, Any]], selected: dict[str, Any]
 ) -> list[str]:
@@ -393,7 +402,7 @@ def _still_open(
         lines.append("|---|---|---|")
         for f in others:
             sources = ", ".join(f"`{s}`" for s in all_sources(cast("Finding", f)))
-            lines.append(f"| `{f.get('id', '?')}` | `{f.get('location', '?')}` | {sources} |")
+            lines.append(f"| `{f.get('id', '?')}` | `{_review_location(f)}` | {sources} |")
     else:
         lines.append(
             "This run's finding sources surfaced no other instances. (v1 surfaces the "

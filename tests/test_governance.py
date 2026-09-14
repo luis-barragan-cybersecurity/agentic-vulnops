@@ -203,12 +203,17 @@ _INITIAL: AVEState = {
 }
 
 
-def test_graph_run_fails_closed_on_unmeasured_blast_radius() -> None:
+def test_graph_run_routes_out_of_policy_on_the_measured_radius() -> None:
     final = run_once(_INITIAL, auto_approve=True)
     record = final.get("decision_record")
     assert record is not None
     assert record["execution"]["route"] == "hitl_approved"
-    assert record["execution"]["hitl_route"] == "unknown_blast_radius"
+    assert record["execution"]["hitl_route"] == "out_of_policy_change"
+    assert "fix_predicates.require_all" in record["rule_matched"]
+    decide_span = next(s for s in final["spans"] if s["phase"] == "decide")
+    assert decide_span["attributes"]["hitl_route"] == "out_of_policy_change"
+    assert final.get("human_approved") is True
+    assert final.get("ready_to_merge") is False
     assert record["response"]["classification"] == "object-ownership-gap"
     # The driven finding is now the model's rediscovery at the anchor location (ticket 25),
     # so the decision record cites that finding's own id, not the catalog's I-04 label.

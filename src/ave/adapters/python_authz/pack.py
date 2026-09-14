@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,12 @@ from ave.adapters.python_authz.llm_finder import (
     AcceptedCandidate,
     LLMFinder,
 )
+from ave.adapters.python_authz.measurement import (
+    BlastRadiusMeasurement,
+    measured_finding,
+)
 from ave.adapters.python_authz.model import default_model_client
+from ave.findings import Dependents
 from ave.state import Finding
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -128,6 +134,53 @@ def _stamp_if_present(finding: Finding) -> dict[str, str] | None:
     return {"path": path, "test": test}
 
 
+def _reviewer_commands(finding: Finding) -> list[dict[str, str]]:
+    """The Before-you-merge commands: the bound exploit (when Prepare stamped one) and
+    the target's own T2 suite."""
+    commands: list[dict[str, str]] = []
+    stamp = _stamp_if_present(finding)
+    if stamp is not None:
+        commands.append(
+            {
+                "command": (
+                    f"cp {stamp['path']} target/dvrestaurant/{TARGET_NODE} && "
+                    f"cd target/dvrestaurant && poetry run pytest "
+                    f"{TARGET_NODE}::{stamp['test']}"
+                ),
+                "expect": (
+                    "FAILS after this fix (inverted polarity — this test IS the "
+                    "attack)"
+                ),
+            }
+        )
+    commands.append(
+        {
+            "command": "cd target/dvrestaurant && poetry run pytest app/tests",
+            "expect": (
+                "green — the target's own suite (the T2 rung; the ladder above "
+                "is honest about not having run it)"
+            ),
+        }
+    )
+    return commands
+
+
+def _patch_paths(patch: str) -> tuple[str, ...]:
+    """Unique target-relative paths from the ``---``/``+++`` headers, sorted —
+    ``a/target/dvrestaurant/app/x.py`` becomes ``app/x.py``. `/dev/null` is ignored."""
+    paths: set[str] = set()
+    for line in patch.splitlines():
+        if not line.startswith(("--- ", "+++ ")):
+            continue
+        raw = line[4:].split("\t")[0].strip()
+        if raw == "/dev/null":
+            continue
+        if raw.startswith(("a/", "b/")):
+            raw = raw[2:]
+        paths.add(raw.removeprefix("target/dvrestaurant/"))
+    return tuple(sorted(paths))
+
+
 class PythonAuthzPack:
     name = "python_authz"
 
@@ -144,7 +197,14 @@ class PythonAuthzPack:
         cull_client = default_model_client(CULL_FIXTURES_DIR)
         report = LLMFinder(store, finder_client).find()
         accepted = [
-            AcceptedCandidate(record=candidate.record, finding=candidate.finding)
+            AcceptedCandidate(
+                record=candidate.record,
+                finding=measured_finding(
+                    store,
+                    candidate,
+                    changed_paths=self._proposed_paths(candidate.finding),
+                ),
+            )
             for candidate in report.accepted
         ]
         reviews = review_accepted(
@@ -173,45 +233,35 @@ class PythonAuthzPack:
             and _has_route(finding)
         )
 
-    def blast_radius(self, finding: Finding) -> dict[str, Any]:
-        """Return reviewer commands and an explicitly unmeasured policy radius."""
+    def _proposed_paths(self, finding: Finding) -> list[str] | None:
+        """The fix plan's changed paths for a drivable finding, None when no plan exists."""
         if not self.can_drive(finding):
+            return None
+        return [str(p) for p in self.fix_plan(finding)["changed_paths"]]
+
+    def measured_dependents(self, findings: Iterable[Finding]) -> Dependents:
+        return {
+            str(f.get("id")): m.dependents
+            for f in findings
+            if (m := BlastRadiusMeasurement.from_finding(f)) is not None
+        }
+
+    def blast_radius(self, finding: Finding) -> dict[str, Any]:
+        """Project the measurement `find()` recorded on the finding. A measured finding
+        is readable even when `can_drive()` is false; a finding this pack neither
+        measured nor can drive still raises."""
+        measurement = BlastRadiusMeasurement.from_finding(finding)
+        if measurement is None and not self.can_drive(finding):
             raise _cannot_finish(finding)
-        commands: list[dict[str, str]] = []
-        stamp = _stamp_if_present(finding)
-        if stamp is not None:
-            commands.append(
-                {
-                    "command": (
-                        f"cp {stamp['path']} target/dvrestaurant/{TARGET_NODE} && "
-                        f"cd target/dvrestaurant && poetry run pytest "
-                        f"{TARGET_NODE}::{stamp['test']}"
-                    ),
-                    "expect": (
-                        "FAILS after this fix (inverted polarity — this test IS the "
-                        "attack)"
-                    ),
-                }
-            )
-        commands.append(
-            {
-                "command": "cd target/dvrestaurant && poetry run pytest app/tests",
-                "expect": (
-                    "green — the target's own suite (the T2 rung; the ladder above "
-                    "is honest about not having run it)"
-                ),
-            }
+        projected = (
+            measurement.projection()
+            if measurement is not None
+            else {"files": None, "dependents": None, "routes": None, "fact": None}
         )
         return {
-            "changed_symbol": "get_order",
-            "callers": ["route:GET /orders/{order_id}"],
-            "max_callers": 1,
-            "rings": ["caller", "pr"],
-            "files": None,
-            "dependents": None,
-            "routes": None,
+            **projected,
             "cleared": _cleared_rows(finding),
-            "before_you_merge": commands,
+            "before_you_merge": _reviewer_commands(finding),
         }
 
     def fix_plan(self, finding: Finding) -> dict[str, Any]:
@@ -244,6 +294,7 @@ class PythonAuthzPack:
             class_level=True,
             summary="Enforce object ownership in get_order (BOLA class-level fix)",
             patch=patch,
+            patch_paths=_patch_paths(patch),
             finding_id=finding.get("id"),
             blast_radius=self.blast_radius(finding),
         )

@@ -3,7 +3,9 @@
 After the human approves at the gate, prepare the class-level change — a fix that removes
 the whole class of the flaw, not one instance — via the language pack's fix template. The
 change carries a real unified-diff patch and its blast radius. No finding selected => no
-change (the loop stays honest).
+change (the loop stays honest). The generated patch must touch exactly the fix plan's
+`changed_paths`: the policy decision was made over those paths, so a patch outside them
+was never decided and fails closed here, before Execute.
 """
 
 from __future__ import annotations
@@ -17,6 +19,10 @@ from ave.records.store import make_span, now_iso
 from ave.state import AVEState, PinnedExploitResult
 
 
+class PatchScopeMismatch(RuntimeError):
+    """The generated patch touches different files than the fix plan Decide evaluated."""
+
+
 def prepare(state: AVEState) -> AVEState:
     started = now_iso()
     selected = state.get("selected_finding")
@@ -26,6 +32,17 @@ def prepare(state: AVEState) -> AVEState:
     if callable(bind):
         bind(run_root)
     change = pack.prepare_fix(selected) if selected is not None else None
+    if change is not None:
+        proposed = tuple(
+            sorted(
+                set(state.get("assessment", {}).get("fix_plan", {}).get("changed_paths", []))
+            )
+        )
+        actual = tuple(change.get("patch_paths", ()))
+        if actual != proposed:
+            raise PatchScopeMismatch(
+                f"patch touches {list(actual)} but the fix plan proposed {list(proposed)}"
+            )
 
     attributes: dict[str, Any] = {"prepared": change is not None}
     result: AVEState = {
