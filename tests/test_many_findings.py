@@ -5,6 +5,7 @@ from typing import Any, cast
 
 from ave.adapters import FindingBatch, LanguagePack, get_default_pack
 from ave.adapters.python_authz import catalog
+from ave.adapters.python_authz.pack import PythonAuthzPack
 from ave.findings import (
     RANK_FUNCTION,
     UNATTRIBUTED_SOURCE,
@@ -128,6 +129,34 @@ def test_merge_keeps_loser_only_oracle_metadata_when_winner_omits_it() -> None:
         "polarity": "inverted",
     }
     assert evidence["is_loop_anchor"] is True
+
+
+def test_external_winner_inherits_the_pack_measurement() -> None:
+    pack = PythonAuthzPack()
+    pack_finding = next(
+        f
+        for f in pack.find("target/dvrestaurant@d32d0997").kept
+        if f["id"] == "ave-llm-get_order_service-get_order"
+    )
+    external = _finding(
+        "sarif-get_order",
+        location="app/apis/orders/services/get_order_service.py:get_order",
+        kind="object-ownership-gap",
+        confidence=0.95,
+        source="sarif:semgrep",
+    )
+    merged = merge_findings([pack_finding, external], location_key=_by_location)[0]
+    assert merged["source"] == "sarif:semgrep"
+    assert "ave:llm-finder" in merged["corroborated_by"]
+    assert (
+        merged["evidence"]["blast_radius_measurement"]
+        == pack_finding["evidence"]["blast_radius_measurement"]
+    )
+    assert (
+        merged["evidence"]["review_location"]
+        == "app/apis/orders/services/get_order_service.py:11"
+    )
+    assert pack.measured_dependents([merged]) == {"sarif-get_order": 0}
 
 
 def test_can_drive_requires_anchor_location_not_just_oracle_keys() -> None:
@@ -327,6 +356,22 @@ def test_run_ingests_many_findings_and_drives_the_anchor() -> None:
     assert cull["client"] == "fixture"
     assess = next(s for s in final["spans"] if s["phase"] == "assess")
     assert assess["attributes"]["selection"]["rank_function"] == RANK_FUNCTION
+
+
+def test_fixture_run_measures_dependents_for_all_eight() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    rationale = final["selection_rationale"]
+    assert rationale["dependents_measured"] == 8
+    assert [(row["id"], row["dependents"]) for row in rationale["ranking"]] == [
+        ("ave-llm-get_order_service-get_order", 0),
+        ("ave-llm-update_profile_service-update_profile", 0),
+        ("ave-llm-service-get_discount_coupons", 0),
+        ("ave-llm-service-get_referral_code_endpoint", 0),
+        ("ave-llm-update_user_role_service-update_user_role", 0),
+        ("ave-llm-delete_menu_item_service-delete_menu_item", 0),
+        ("ave-llm-update_menu_item_service-update_menu_item", 0),
+        ("ave-llm-get_orders_for_delivery_service-get_orders", 0),
+    ]
 
 
 def test_run_record_has_one_lifecycle_per_ingested_finding() -> None:

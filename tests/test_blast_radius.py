@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from ave.adapters import get_default_pack
 from ave.adapters.python_authz.code_facts import CodeFactsStore
 from ave.adapters.python_authz.llm_finder import AcceptedCandidate
 from ave.adapters.python_authz.measurement import (
@@ -22,8 +21,15 @@ from ave.adapters.python_authz.measurement import (
 )
 from ave.adapters.python_authz.pack import PythonAuthzPack
 from ave.phases.prepare import PatchScopeMismatch, prepare
+from ave.policy import policy_version
 from ave.pr import _one_fact
+from ave.runner import run_once
 from ave.state import AVEState, Finding
+
+_INITIAL: AVEState = {
+    "target_ref": "target/dvrestaurant@d32d0997",
+    "policy_version": policy_version(),
+}
 
 _ANCHOR_ID = "ave-llm-get_order_service-get_order"
 _ANCHOR_HANDLER = "target/dvrestaurant/app/apis/orders/services/get_order_service.py:get_order"
@@ -178,7 +184,7 @@ def test_prepare_fails_closed_when_the_patch_leaves_the_decided_scope(
         "assessment": {"fix_plan": {"changed_paths": ["app/other.py"]}},
         "run_record_id": "blast-radius-scope-mismatch",
     }
-    with pytest.raises(PatchScopeMismatch, match="app/other.py"):
+    with pytest.raises(PatchScopeMismatch, match=r"app/other\.py"):
         prepare(state)
 
 
@@ -195,3 +201,81 @@ def test_measurement_roundtrips_and_unknown_provenance_degrades(
     parsed = BlastRadiusMeasurement.from_finding(made_up)
     assert parsed is not None
     assert parsed.provenance is None
+
+
+def test_assess_decision_and_prepared_change_agree_on_the_counts() -> None:
+    final = run_once(_INITIAL, auto_approve=True)
+    assess = next(span for span in final["spans"] if span["phase"] == "assess")
+    assess_blast = assess["attributes"]["blast_radius"]
+    assert {k: assess_blast[k] for k in ("files", "dependents", "routes")} == {
+        "files": 1,
+        "dependents": 0,
+        "routes": 1,
+    }
+    prepared = final["prepared_change"]["blast_radius"]
+    for key in ("files", "dependents", "routes", "fact"):
+        assert prepared[key] == assess_blast[key]
+    assert assess_blast["fact"] == {
+        "statement": (
+            "The AST inventory identifies get_order as the GET /orders/{order_id} route "
+            "handler. A complete caller-index query found no dependent call sites in the "
+            "allowlisted tree."
+        ),
+        "provenance": "ast_resolved",
+        "how_sure": 5,
+        "proof": (
+            "The inventory cites "
+            "target/dvrestaurant/app/apis/orders/services/get_order_service.py:11-20. "
+            "The recorded reach is complete, and dependent_sites is empty."
+        ),
+        "citations": [
+            {
+                "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                "start_line": 11,
+                "end_line": 20,
+                "contains": "def get_order(",
+            }
+        ],
+    }
+    assert final["decision_record"]["execution"]["blast_radius"] == {
+        "files": 1,
+        "dependents": 0,
+        "routes": 1,
+    }
+    assert final["prepared_change"]["patch_paths"] == (
+        "app/apis/orders/services/get_order_service.py",
+    )
+
+
+def test_measurement_record_shape_on_the_anchor(kept: tuple[Finding, ...]) -> None:
+    measurement = BlastRadiusMeasurement.from_finding(_by_id(kept, _ANCHOR_ID))
+    assert measurement is not None
+    assert measurement.to_dict() == {
+        "provenance": "ast_resolved",
+        "handler_id": (
+            "target/dvrestaurant/app/apis/orders/services/get_order_service.py:get_order"
+        ),
+        "symbol_resolved": True,
+        "reach_complete": True,
+        "changed_paths": ["app/apis/orders/services/get_order_service.py"],
+        "dependent_sites": [],
+        "affected_routes": [
+            {
+                "handler_id": (
+                    "target/dvrestaurant/app/apis/orders/services/"
+                    "get_order_service.py:get_order"
+                ),
+                "method": "GET",
+                "path": "/orders/{order_id}",
+            }
+        ],
+        "unresolved_edges": [],
+        "citations": [
+            {
+                "file": "target/dvrestaurant/app/apis/orders/services/get_order_service.py",
+                "start_line": 11,
+                "end_line": 20,
+                "contains": "def get_order(",
+            }
+        ],
+    }
