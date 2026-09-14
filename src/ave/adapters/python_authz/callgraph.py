@@ -103,7 +103,12 @@ def build_call_graph(trees: Sequence[ParsedTree], *, app_root: str) -> CallGraph
 def _module_of(rel: str, app_root: str) -> str:
     prefix = app_root + "/"
     assert rel.startswith(prefix), rel
-    return rel[len(prefix) : -3].replace("/", ".").removesuffix(".__init__")
+    dotted = rel[len(prefix) : -3].replace("/", ".")
+    # The allowlist-root package is the empty module, not "__init__"; removesuffix
+    # only strips the dotted form used by nested packages.
+    if dotted == "__init__":
+        return ""
+    return dotted.removesuffix(".__init__")
 
 
 def _enclosing_defs(tree: ast.Module) -> dict[int, str]:
@@ -139,7 +144,9 @@ class _Index:
     def _resolve_module(self, rel: str, node: ast.ImportFrom) -> str:
         if not node.level:
             return node.module or ""
-        pkg = _module_of(rel, self._app_root).split(".")
+        name = _module_of(rel, self._app_root)
+        # "".split(".") is [""], which would join to ".foo" for a root-relative import.
+        pkg = name.split(".") if name else []
         if not rel.endswith("__init__.py"):
             pkg = pkg[:-1]
         if node.level > 1:
@@ -157,14 +164,19 @@ class _Index:
         }
 
     def _bind(self, rel: str, seen: set[str]) -> dict[str, _Binding]:
-        bindings: dict[str, _Binding] = {
-            name: ("def", symbol) for name, symbol in self.defs[rel].items()
-        }
+        # Walk body order so a later local def/class wins over an earlier import of
+        # the same name, matching Python. Preloading defs first inverted that.
+        bindings: dict[str, _Binding] = {}
         for node in self._trees[rel].body:
-            if isinstance(node, ast.Import):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bindings[node.name] = ("def", self.defs[rel][node.name])
+            elif isinstance(node, ast.Import):
                 for alias in node.names:
                     local = alias.asname or alias.name.split(".")[0]
-                    target = self._by_module.get(alias.name)
+                    # `import a.b` binds `a` to package `a`; `import a.b as c` binds `c`
+                    # to module `a.b`.
+                    module_name = alias.name if alias.asname else local
+                    target = self._by_module.get(module_name)
                     bindings[local] = ("module", target) if target else ("external", None)
             elif isinstance(node, ast.ImportFrom):
                 mod = self._resolve_module(rel, node)
@@ -175,7 +187,7 @@ class _Index:
                             bindings.update(self._exports(mod_rel, seen))
                         continue
                     local = alias.asname or alias.name
-                    sub = self._by_module.get(f"{mod}.{alias.name}")
+                    sub = self._by_module.get(f"{mod}.{alias.name}" if mod else alias.name)
                     if mod_rel is None:
                         # A namespace package (no __init__.py) has no defs of its own;
                         # only a submodule can bind.
